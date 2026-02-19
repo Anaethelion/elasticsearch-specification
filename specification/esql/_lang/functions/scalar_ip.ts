@@ -20,11 +20,21 @@
 
 import { ip, keyword, text, boolean, integer } from '@esql/_lang/data_types'
 
-/** Returns true if the IP matches any of the provided CIDR blocks. @esql_function scalar */
+/**
+ * Returns true if the IP matches any of the provided CIDR blocks.
+ * @esql_function scalar
+ */
 export function CIDR_MATCH(ip_value: ip, ...cidr_blocks: Array<keyword | text>): boolean
 
-/** Truncates an IP to a given prefix length. @esql_function scalar */
+/**
+ * Truncates an IP to a given prefix length.
+ * @esql_function scalar
+ */
 export function IP_PREFIX(ip_value: ip, prefix_length_v4: integer, prefix_length_v6: integer): ip
 
-/** Computes the network direction based on source and destination IPs. @esql_function scalar @esql_alias NETDIR */
+/**
+ * Computes the network direction based on source and destination IPs.
+ * @esql_function scalar
+ * @esql_alias NETDIR
+ */
 export function NETWORK_DIRECTION(source: ip, destination: ip, ...cidr_blocks: Array<keyword | text>): keyword

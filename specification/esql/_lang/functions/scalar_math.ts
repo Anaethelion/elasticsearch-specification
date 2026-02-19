@@ -56,7 +56,10 @@ export function ASINH(number: double | integer | long | unsigned_long): double
 /** @esql_function scalar */
 export function ATANH(number: double | integer | long | unsigned_long): double
 
-/** Returns Euler's number. @esql_function scalar */
+/**
+ * Returns Euler's number.
+ * @esql_function scalar
+ */
 export function E(): double
 
 /** @esql_function scalar */
@@ -71,7 +74,10 @@ export function LOG(base: double | integer | long | unsigned_long, value?: doubl
 /** @esql_function scalar */
 export function LOG10(number: double | integer | long | unsigned_long): double
 
-/** Returns the mathematical constant pi. @esql_function scalar */
+/**
+ * Returns the mathematical constant pi.
+ * @esql_function scalar
+ */
 export function PI(): double
 
 /** @esql_function scalar */
@@ -101,7 +107,10 @@ export function TAN(angle: double | integer | long | unsigned_long): double
 /** @esql_function scalar */
 export function TANH(angle: double | integer | long | unsigned_long): double
 
-/** Returns the mathematical constant tau (2*pi). @esql_function scalar */
+/**
+ * Returns the mathematical constant tau (2*pi).
+ * @esql_function scalar
+ */
 export function TAU(): double
 
 /** @esql_function scalar */
