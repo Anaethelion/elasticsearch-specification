@@ -1028,6 +1028,270 @@ pub struct UrlTemplate {
     pub deprecation: Option<Deprecation>,
 }
 
+//------------------------------------------------------------------------------------------------------------
+// ES|QL Language Model
+//------------------------------------------------------------------------------------------------------------
+
+/// An ES|QL data type that can appear in function signatures, operator definitions, etc.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EsqlDataType {
+    pub name: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    /// Whether this type can appear in source data (e.g. FROM fields)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_capable: Option<bool>,
+
+    /// Whether this type can be produced by functions or expressions
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub result_capable: Option<bool>,
+}
+
+/// A named clause within an ES|QL command (e.g. BY in STATS, METADATA in FROM).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EsqlCommandClause {
+    /// The clause keyword as written in the language (e.g. "BY", "METADATA")
+    pub keyword: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    pub required: bool,
+
+    #[serde(rename = "type")]
+    pub typ: ValueOf,
+}
+
+/// An ES|QL command (e.g. FROM, KEEP, STATS, WHERE).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EsqlCommand {
+    /// Uppercase command name (e.g. "FROM", "KEEP", "STATS")
+    pub name: String,
+
+    pub position: EsqlCommandPosition,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub main_argument: Option<ValueOf>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub clauses: Vec<EsqlCommandClause>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub availability: Option<Availabilities>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EsqlCommandPosition {
+    Source,
+    Processing,
+}
+
+/// A parameter of an ES|QL operator.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EsqlOperatorParam {
+    pub name: String,
+
+    pub types: Vec<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// An ES|QL operator (e.g. +, ==, NOT, IS NULL).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EsqlOperator {
+    /// Uppercase identifier (e.g. "ADD", "EQUALS", "NOT", "IS_NULL")
+    pub name: String,
+
+    /// The operator symbol as written in ES|QL (e.g. "+", "==", "NOT", "IS NULL")
+    pub symbol: String,
+
+    pub fixity: EsqlOperatorFixity,
+
+    /// Lower number = binds tighter
+    pub precedence_group: u32,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    pub params: Vec<EsqlOperatorParam>,
+
+    pub return_type: Vec<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub availability: Option<Availabilities>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EsqlOperatorFixity {
+    Prefix,
+    Infix,
+    Postfix,
+}
+
+/// A hint for an ES|QL function parameter.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EsqlParamHint {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entity_type: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub constraints: Vec<EsqlParamConstraint>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EsqlParamConstraint {
+    pub name: String,
+    pub value: String,
+}
+
+/// A parameter of an ES|QL function.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EsqlFunctionParam {
+    pub name: String,
+
+    pub types: Vec<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    pub optional: bool,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub since: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<EsqlParamHint>,
+}
+
+/// An entry within an ES|QL map parameter.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EsqlMapParamEntry {
+    pub name: String,
+
+    pub types: Vec<String>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub value_hint: Vec<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    pub optional: bool,
+}
+
+/// A map parameter of an ES|QL function (e.g. MATCH options).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EsqlMapParam {
+    pub name: String,
+
+    pub entries: Vec<EsqlMapParamEntry>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    pub optional: bool,
+}
+
+/// An example of using an ES|QL function.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EsqlFunctionExample {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    pub query: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub explanation: Option<String>,
+}
+
+/// An ES|QL function definition (e.g. ABS, AVG, MATCH).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EsqlFunctionDefinition {
+    /// Uppercase function name (e.g. "ABS", "AVG", "MATCH")
+    pub name: String,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
+
+    pub kind: EsqlFunctionKind,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detailed_description: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview: Option<bool>,
+
+    pub params: Vec<EsqlFunctionParam>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub map_params: Vec<EsqlMapParam>,
+
+    pub return_type: Vec<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub availability: Option<Availabilities>,
+
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub examples: Vec<EsqlFunctionExample>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EsqlFunctionKind {
+    Scalar,
+    Aggregate,
+    Grouping,
+    TimeSeriesAggregate,
+}
+
+/// The complete ES|QL language model.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct EsqlLanguageModel {
+    #[serde(default)]
+    pub data_types: Vec<EsqlDataType>,
+
+    #[serde(default)]
+    pub commands: Vec<EsqlCommand>,
+
+    #[serde(default)]
+    pub operators: Vec<EsqlOperator>,
+
+    #[serde(default)]
+    pub functions: Vec<EsqlFunctionDefinition>,
+}
+
+//------------------------------------------------------------------------------------------------------------
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelInfo {
@@ -1049,6 +1313,9 @@ pub struct Model {
     pub info: Option<ModelInfo>,
     pub endpoints: Vec<Endpoint>,
     pub types: Vec<TypeDefinition>,
+    /// The ES|QL language model: functions, commands, operators, and data types
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub esql: Option<EsqlLanguageModel>,
 }
 
 impl Model {
@@ -1072,6 +1339,10 @@ pub struct IndexedModel {
     #[serde(serialize_with = "serialize_types")]
     #[serde(deserialize_with = "deserialize_types")]
     pub types: IndexMap<TypeName, TypeDefinition>,
+
+    /// The ES|QL language model: functions, commands, operators, and data types
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub esql: Option<EsqlLanguageModel>,
 }
 
 impl IndexedModel {
@@ -1185,6 +1456,7 @@ impl From<Model> for IndexedModel {
             info: value.info,
             endpoints: value.endpoints,
             types: value.types.into_iter().map(|t| (t.name().clone(), t)).collect(),
+            esql: value.esql,
         }
     }
 }
@@ -1195,6 +1467,7 @@ impl From<IndexedModel> for Model {
             info: value.info,
             endpoints: value.endpoints,
             types: value.types.into_iter().map(|(_, t)| t).collect(),
+            esql: value.esql,
         }
     }
 }
