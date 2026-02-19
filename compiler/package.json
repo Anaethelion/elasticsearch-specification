@@ -17,7 +17,7 @@
     "compile:specification": "tsc --project ../specification/tsconfig.json --noEmit",
     "build": "rm -rf lib && tsc",
     "validate-ts-view": "tsc --noEmit ../output/typescript/types.ts",
-    "extract-esql-lang": "ts-node src/extract-esql-lang.ts",
+    "extract-esql-lang": "ts-node src/esql/extract.ts",
     "generate-dangling": "ts-node src dangling-types-report.ts",
     "test": "TEST_COMPILER=true ava test/**/*test.ts",
     "test:coverage": "TEST_COMPILER=true c8 --reporter html ava test/**/*test.ts"

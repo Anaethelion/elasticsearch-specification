@@ -339,7 +339,8 @@ function parseAvailability (dupTags: Record<string, string[]>): model.Availabili
       kv[k] = v
     }
     result[flavor] = {
-      since: kv.since
+      since: kv.since,
+      stability: kv.stability as model.Stability
     }
   }
   return result

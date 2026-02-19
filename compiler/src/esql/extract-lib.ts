@@ -1,23 +1,9 @@
-#!/usr/bin/env ts-node
 /**
- * Extract ES|QL language metadata from the Elasticsearch Java source.
+ * ES|QL extraction library — reusable functions for parsing Java source
+ * and generating TypeScript function files.
  *
- * This script parses:
- *   - Function classes annotated with @FunctionInfo/@Param/@MapParam
- *   - EsqlFunctionRegistry.java for function aliases and registry
- *   - EsqlBaseParser.g4 for command grammar
- *   - Expression.g4 for operator grammar
- *   - DataType.java for the type catalog
- *
- * It generates/updates TypeScript files under specification/esql/_lang/.
- *
- * Usage:
- *   npx ts-node src/extract-esql-lang.ts --es-path /path/to/elasticsearch
- *
- * Or via the Makefile:
- *   make extract-esql-lang es=/path/to/elasticsearch
- *
- * The script expects the Elasticsearch repository to be checked out locally.
+ * This module is side-effect-free and can be imported by tests.
+ * The CLI entry point lives in ./extract.ts.
  */
 
 import * as fs from 'fs'
@@ -26,71 +12,36 @@ import Parser from 'tree-sitter'
 import Java from 'tree-sitter-java'
 
 // ---------------------------------------------------------------------------
-// CLI arg parsing
-// ---------------------------------------------------------------------------
-
-const args = process.argv.slice(2)
-let esPath = ''
-let outDir = ''
-
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === '--es-path' && args[i + 1]) {
-    esPath = args[++i]
-  } else if (args[i] === '--out' && args[i + 1]) {
-    outDir = args[++i]
-  }
-}
-
-if (!esPath) {
-  console.error('Usage: npx ts-node src/extract-esql-lang.ts --es-path /path/to/elasticsearch [--out /path/to/spec/esql/_lang]')
-  process.exit(1)
-}
-
-// npm sets cwd to the package directory; resolve relative paths against the
-// original working directory so that `make extract-esql-lang es=../elasticsearch` works.
-const invocationCwd = process.env.INIT_CWD ?? process.cwd()
-esPath = path.resolve(invocationCwd, esPath)
-
-if (!outDir) {
-  outDir = path.join(__dirname, '..', '..', 'specification', 'esql', '_lang')
-} else {
-  outDir = path.resolve(invocationCwd, outDir)
-}
-
-const esqlPlugin = path.join(esPath, 'x-pack', 'plugin', 'esql')
-const esqlSrc = path.join(esqlPlugin, 'src', 'main', 'java')
-
-// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface MapParamEntry {
+export interface MapParamEntry {
   name: string
   types: string[]
   valueHint: string[]
   description: string
 }
 
-interface MapParamDef {
+export interface MapParamDef {
   name: string
   description: string
   entries: MapParamEntry[]
   optional: boolean
 }
 
-interface FunctionParam {
+export interface FunctionParam {
   name: string
   types: string[]
   description: string
   optional: boolean
 }
 
-interface AvailabilityEntry {
+export interface AvailabilityEntry {
   lifecycle: string
   version: string
 }
 
-interface FunctionDef {
+export interface FunctionDef {
   name: string
   kind: string
   description: string
@@ -106,11 +57,18 @@ interface FunctionDef {
   javaClassName: string
 }
 
+export interface RegistryEntry {
+  /** Canonical ES|QL function name (uppercased) from the registry's first string arg */
+  canonicalName: string
+  /** Additional names (uppercased) */
+  aliases: string[]
+}
+
 // ---------------------------------------------------------------------------
 // tree-sitter parser (initialised once)
 // ---------------------------------------------------------------------------
 
-const tsParser = new Parser()
+export const tsParser = new Parser()
 tsParser.setLanguage(Java)
 
 type SyntaxNode = Parser.SyntaxNode
@@ -119,7 +77,7 @@ type SyntaxNode = Parser.SyntaxNode
 // File-system helpers
 // ---------------------------------------------------------------------------
 
-function findFiles (dir: string, pattern: RegExp): string[] {
+export function findFiles (dir: string, pattern: RegExp): string[] {
   const results: string[] = []
   if (!fs.existsSync(dir)) return results
 
@@ -135,7 +93,7 @@ function findFiles (dir: string, pattern: RegExp): string[] {
   return results
 }
 
-function readFile (filePath: string): string {
+export function readFile (filePath: string): string {
   return fs.readFileSync(filePath, 'utf-8')
 }
 
@@ -143,7 +101,7 @@ function readFile (filePath: string): string {
 // AST helpers
 // ---------------------------------------------------------------------------
 
-function findAll (node: SyntaxNode, type: string): SyntaxNode[] {
+export function findAll (node: SyntaxNode, type: string): SyntaxNode[] {
   const results: SyntaxNode[] = []
   if (node.type === type) results.push(node)
   for (let i = 0; i < node.childCount; i++) {
@@ -152,13 +110,13 @@ function findAll (node: SyntaxNode, type: string): SyntaxNode[] {
   return results
 }
 
-function getAnnotationName (ann: SyntaxNode): string {
+export function getAnnotationName (ann: SyntaxNode): string {
   const nameNode = ann.childForFieldName('name')
   return nameNode?.text ?? ''
 }
 
 /** Return a Map of attribute-name to value-node for direct element_value_pair children. */
-function getAnnotationPairs (ann: SyntaxNode): Map<string, SyntaxNode> {
+export function getAnnotationPairs (ann: SyntaxNode): Map<string, SyntaxNode> {
   const pairs = new Map<string, SyntaxNode>()
   const argList = ann.children.find(c => c.type === 'annotation_argument_list')
   if (argList == null) return pairs
@@ -177,14 +135,12 @@ function getAnnotationPairs (ann: SyntaxNode): Map<string, SyntaxNode> {
 }
 
 /** Resolve a string value node, handling string_literal, text blocks, and binary_expression (+concat). */
-function resolveString (node: SyntaxNode): string {
+export function resolveString (node: SyntaxNode): string {
   if (node.type === 'string_literal') {
     const text = node.text
-    // Text block: """..."""
     if (text.startsWith('"""')) {
       return resolveTextBlock(text)
     }
-    // Regular string: strip surrounding quotes
     return text.slice(1, -1)
   }
 
@@ -202,7 +158,7 @@ function resolveString (node: SyntaxNode): string {
   return node.text
 }
 
-function resolveTextBlock (raw: string): string {
+export function resolveTextBlock (raw: string): string {
   const inner = raw.slice(3, -3)
   const lines = inner.split('\n')
   if (lines.length > 0 && lines[0].trim() === '') lines.shift()
@@ -212,7 +168,7 @@ function resolveTextBlock (raw: string): string {
 }
 
 /** Resolve an array value: `{ "a", "b" }` or a single `"value"`. */
-function resolveStringArray (node: SyntaxNode): string[] {
+export function resolveStringArray (node: SyntaxNode): string[] {
   if (node.type === 'element_value_array_initializer') {
     const results: string[] = []
     for (let i = 0; i < node.childCount; i++) {
@@ -232,7 +188,7 @@ function resolveStringArray (node: SyntaxNode): string[] {
 }
 
 /** Resolve an enum constant (`FunctionType.AGGREGATE`) or quoted string. */
-function resolveEnum (node: SyntaxNode): string {
+export function resolveEnum (node: SyntaxNode): string {
   if (node.type === 'field_access') {
     const ids = findAll(node, 'identifier')
     return ids.length > 0 ? ids[ids.length - 1].text : node.text
@@ -243,49 +199,53 @@ function resolveEnum (node: SyntaxNode): string {
   return node.text
 }
 
-function resolveBool (node: SyntaxNode): boolean {
+export function resolveBool (node: SyntaxNode): boolean {
   return node.type === 'true'
 }
 
 /** Resolve a param/entry name: string literals are unquoted; bare identifiers (Java constants) are lowercased. */
-function resolveParamName (node: SyntaxNode): string {
+export function resolveParamName (node: SyntaxNode): string {
   if (node.type === 'string_literal') return resolveString(node)
   return node.text.toLowerCase()
 }
 
 /** Strip Asciidoc markup, doc-system placeholders, and stray whitespace from Java descriptions. */
-function sanitizeDescription (text: string): string {
+export function sanitizeDescription (text: string): string {
   return text
-    // {wikipedia}/Page_Name[display text] -> display text (https://en.wikipedia.org/wiki/Page_Name)
     .replace(/\{wikipedia\}\/([^\[]+)\[([^\]]+)\]/g, '$2 (https://en.wikipedia.org/wiki/$1)')
-    // {attr}/path[display text] for any other attribute -> display text
     .replace(/\{[a-zA-Z_-]+\}\/[^\[]*\[([^\]]+)\]/g, '$1')
-    // <<anchor,display text>> -> display text
     .replace(/<<[^,>]+,([^>]+)>>/g, '$1')
-    // <<anchor>> -> anchor with hyphens as spaces
     .replace(/<<([^>]+)>>/g, (_, anchor: string) => anchor.replace(/-/g, ' '))
-    // [text](docs-content://...) or [text](/reference/...) -> text
     .replace(/\[([^\]]+)\]\((docs-content:\/\/|\/reference\/)[^)]*\)/g, '$1')
-    // literal \n -> space
     .replace(/\\n/g, ' ')
-    // collapse multiple whitespace
     .replace(/\s{2,}/g, ' ')
     .trim()
 }
 
 /** Convert PascalCase class name to UPPER_SNAKE_CASE: HistogramPercentile -> HISTOGRAM_PERCENTILE */
-function camelToUpperSnake (name: string): string {
+export function camelToUpperSnake (name: string): string {
   return name
     .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
     .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
     .toUpperCase()
 }
 
+/** Map Java FunctionAppliesToLifecycle to metamodel Stability. Returns undefined for skipped lifecycles. */
+export function lifecycleToStability (lifecycle: string): string | undefined {
+  switch (lifecycle) {
+    case 'GA': return 'stable'
+    case 'BETA': return 'beta'
+    case 'PREVIEW': return 'experimental'
+    case 'DEVELOPMENT': return 'experimental'
+    default: return undefined
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Extract @FunctionInfo from a parsed Java file
 // ---------------------------------------------------------------------------
 
-function extractFunctionDefs (tree: Parser.Tree, filePath: string, functionDir: string): FunctionDef[] {
+export function extractFunctionDefs (tree: Parser.Tree, filePath: string, functionDir: string): FunctionDef[] {
   const results: FunctionDef[] = []
   const root = tree.rootNode
 
@@ -378,7 +338,7 @@ function extractFunctionDefs (tree: Parser.Tree, filePath: string, functionDir: 
 // Extract @Param
 // ---------------------------------------------------------------------------
 
-function extractParam (ann: SyntaxNode): FunctionParam | null {
+export function extractParam (ann: SyntaxNode): FunctionParam | null {
   const pairs = getAnnotationPairs(ann)
 
   const nameNode = pairs.get('name')
@@ -396,7 +356,7 @@ function extractParam (ann: SyntaxNode): FunctionParam | null {
 // Extract @MapParam
 // ---------------------------------------------------------------------------
 
-function extractMapParam (ann: SyntaxNode): MapParamDef | null {
+export function extractMapParam (ann: SyntaxNode): MapParamDef | null {
   const pairs = getAnnotationPairs(ann)
 
   const nameNode = pairs.get('name')
@@ -432,20 +392,9 @@ function extractMapParam (ann: SyntaxNode): MapParamDef | null {
 // Parse function registry for aliases
 // ---------------------------------------------------------------------------
 
-interface RegistryEntry {
-  /** Canonical ES|QL function name (uppercased) from the registry's first string arg */
-  canonicalName: string
-  /** Additional names (uppercased) */
-  aliases: string[]
-}
-
-function parseRegistry (registryPath: string): Map<string, RegistryEntry> {
+export function parseRegistryContent (content: string): Map<string, RegistryEntry> {
   const entries = new Map<string, RegistryEntry>()
-  if (!fs.existsSync(registryPath)) return entries
 
-  const content = readFile(registryPath)
-
-  // Match: def(ClassName.class, <optional constructor ref>, "name1", "name2", ...)
   const defRegex = /def\s*\(\s*(\w+)\.class\s*,[^"]*?((?:"[^"]*"\s*,?\s*)+)\)/g
   let match: RegExpExecArray | null
 
@@ -463,16 +412,20 @@ function parseRegistry (registryPath: string): Map<string, RegistryEntry> {
   return entries
 }
 
+export function parseRegistry (registryPath: string): Map<string, RegistryEntry> {
+  if (!fs.existsSync(registryPath)) return new Map()
+  return parseRegistryContent(readFile(registryPath))
+}
+
 // ---------------------------------------------------------------------------
 // Java subdir -> TypeScript filename mapping
 // ---------------------------------------------------------------------------
 
-function subdirToTsFile (subdir: string): string {
+export function subdirToTsFile (subdir: string): string {
   if (subdir === '') return 'scalar_misc'
   if (subdir === 'scalar') return 'scalar_misc'
   if (subdir.startsWith('scalar/')) {
     const rest = subdir.slice(7)
-    // Merge deeper nesting into the parent: scalar/string/regex -> scalar_string
     const topLevel = rest.split('/')[0]
     return 'scalar_' + topLevel
   }
@@ -480,13 +433,13 @@ function subdirToTsFile (subdir: string): string {
 }
 
 // Types that are built-in to TypeScript and should not be declared in or imported from data_types.ts
-const TS_BUILTIN_TYPES = new Set(['boolean', 'string', 'object'])
+export const TS_BUILTIN_TYPES = new Set(['boolean', 'string', 'object'])
 
 // ---------------------------------------------------------------------------
 // Collect all types used by a set of functions
 // ---------------------------------------------------------------------------
 
-function collectUsedTypes (funcs: FunctionDef[]): Set<string> {
+export function collectUsedTypes (funcs: FunctionDef[]): Set<string> {
   const types = new Set<string>()
   for (const f of funcs) {
     for (const t of f.returnTypes) types.add(t)
@@ -506,7 +459,7 @@ function collectUsedTypes (funcs: FunctionDef[]): Set<string> {
 // Sync missing types to data_types.ts
 // ---------------------------------------------------------------------------
 
-function syncDataTypes (allTypes: Set<string>, dataTypesPath: string): string[] {
+export function syncDataTypes (allTypes: Set<string>, dataTypesPath: string): string[] {
   let content = readFile(dataTypesPath)
   const existing = new Set<string>()
   const re = /^export type (\w+)\s*=/gm
@@ -534,7 +487,7 @@ function syncDataTypes (allTypes: Set<string>, dataTypesPath: string): string[] 
 // TypeScript file generation
 // ---------------------------------------------------------------------------
 
-const LICENSE_HEADER = `// @ts-nocheck \u2014 body-less function declarations are intentional (TS2391)
+export const LICENSE_HEADER = `// @ts-nocheck \u2014 body-less function declarations are intentional (TS2391)
 /*
  * Licensed to Elasticsearch B.V. under one or more contributor
  * license agreements. See the NOTICE file distributed with
@@ -554,7 +507,7 @@ const LICENSE_HEADER = `// @ts-nocheck \u2014 body-less function declarations ar
  * under the License.
  */`
 
-function generateTsFile (funcs: FunctionDef[]): string {
+export function generateTsFile (funcs: FunctionDef[]): string {
   const sorted = [...funcs].sort((a, b) => a.name.localeCompare(b.name))
 
   const usedTypes = collectUsedTypes(sorted)
@@ -578,7 +531,6 @@ function generateTsFile (funcs: FunctionDef[]): string {
   for (const func of sorted) {
     lines.push('')
 
-    // Emit MapParam options class before the function
     for (const mp of func.mapParams) {
       const optClassName = func.name + 'Options'
       lines.push('/**')
@@ -597,7 +549,6 @@ function generateTsFile (funcs: FunctionDef[]): string {
       lines.push('')
     }
 
-    // JSDoc block
     const jsdocLines: string[] = []
     if (func.description) {
       const descLine = func.description.split('\n')[0].trim()
@@ -608,17 +559,17 @@ function generateTsFile (funcs: FunctionDef[]): string {
       jsdocLines.push(`@esql_alias ${alias}`)
     }
 
-    const gaEntry = func.availability.find(a => a.lifecycle === 'GA')
-    const previewEntry = func.availability.find(a => a.lifecycle === 'PREVIEW')
-    if (gaEntry?.version) {
-      jsdocLines.push(`@availability stack since=${gaEntry.version}`)
-      jsdocLines.push('@availability serverless')
-    } else if (previewEntry?.version) {
-      jsdocLines.push(`@availability stack since=${previewEntry.version}`)
-      jsdocLines.push('@availability serverless')
+    const emittable = func.availability.filter(a => lifecycleToStability(a.lifecycle) != null)
+    const gaEntry = emittable.find(a => a.lifecycle === 'GA')
+    const bestEntry = gaEntry ?? emittable[0]
+    if (bestEntry != null) {
+      const stability = lifecycleToStability(bestEntry.lifecycle)!
+      const sincePart = bestEntry.version ? ` since=${bestEntry.version}` : ''
+      jsdocLines.push(`@availability stack${sincePart} stability=${stability}`)
+      jsdocLines.push(`@availability serverless stability=${stability}`)
     }
 
-    if (func.preview || (func.availability.length > 0 && gaEntry == null)) {
+    if (func.preview || (emittable.length > 0 && gaEntry == null)) {
       jsdocLines.push('@esql_preview')
     }
 
@@ -628,7 +579,6 @@ function generateTsFile (funcs: FunctionDef[]): string {
     }
     lines.push(' */')
 
-    // Function declaration
     const returnUnion = func.returnTypes.join(' | ') || 'void'
     const paramStrs: string[] = []
 
@@ -668,88 +618,3 @@ function generateTsFile (funcs: FunctionDef[]): string {
   lines.push('')
   return lines.join('\n')
 }
-
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-
-function main (): void {
-  console.log(`Extracting ES|QL metadata from: ${esPath}`)
-  console.log(`Output directory: ${outDir}`)
-  console.log()
-
-  const functionDir = path.join(esqlSrc, 'org', 'elasticsearch', 'xpack', 'esql', 'expression', 'function')
-  const javaFiles = findFiles(functionDir, /\.java$/)
-  console.log(`Found ${javaFiles.length} Java files in function directory`)
-
-  const allFunctions: FunctionDef[] = []
-  for (const file of javaFiles) {
-    const content = readFile(file)
-    if (content.includes('@FunctionInfo')) {
-      const tree = tsParser.parse(content)
-      const defs = extractFunctionDefs(tree, file, functionDir)
-      allFunctions.push(...defs)
-    }
-  }
-
-  const registryFiles = findFiles(esqlSrc, /EsqlFunctionRegistry\.java$/)
-  for (const file of registryFiles) {
-    const registry = parseRegistry(file)
-    for (const func of allFunctions) {
-      const entry = registry.get(func.javaClassName)
-      if (entry != null) {
-        func.name = entry.canonicalName
-        func.aliases = entry.aliases
-      }
-    }
-  }
-
-  console.log(`Extracted ${allFunctions.length} function definitions`)
-
-  const byKind = new Map<string, FunctionDef[]>()
-  for (const func of allFunctions) {
-    const kind = func.kind
-    if (!byKind.has(kind)) byKind.set(kind, [])
-    byKind.get(kind)!.push(func)
-  }
-
-  for (const [kind, funcs] of byKind.entries()) {
-    console.log(`  ${kind}: ${funcs.length}`)
-  }
-
-  // Group functions by target TS file
-  const byFile = new Map<string, FunctionDef[]>()
-  for (const func of allFunctions) {
-    const tsFile = subdirToTsFile(func.sourceSubdir)
-    if (!byFile.has(tsFile)) byFile.set(tsFile, [])
-    byFile.get(tsFile)!.push(func)
-  }
-
-  // Sync missing data types
-  const allTypes = collectUsedTypes(allFunctions)
-  const dataTypesPath = path.join(outDir, 'data_types.ts')
-  const addedTypes = syncDataTypes(allTypes, dataTypesPath)
-  if (addedTypes.length > 0) {
-    console.log(`\nAdded ${addedTypes.length} new data types to data_types.ts:`)
-    for (const t of addedTypes) {
-      console.log(`  ${t}`)
-    }
-  }
-
-  // Generate TS files
-  const functionsDir = path.join(outDir, 'functions')
-  fs.mkdirSync(functionsDir, { recursive: true })
-
-  console.log(`\nGenerating TypeScript files:`)
-  const sortedFiles = [...byFile.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-  for (const [tsFile, funcs] of sortedFiles) {
-    const content = generateTsFile(funcs)
-    const filePath = path.join(functionsDir, `${tsFile}.ts`)
-    fs.writeFileSync(filePath, content)
-    console.log(`  ${tsFile}.ts: ${funcs.length} functions`)
-  }
-
-  console.log(`\nDone. Generated ${sortedFiles.length} files with ${allFunctions.length} functions.`)
-}
-
-main()
