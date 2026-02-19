@@ -18,17 +18,12 @@
  * under the License.
  */
 
-import { keyword, text, dense_vector } from '@esql/_lang/data_types'
+import { dense_vector, keyword } from '@esql/_lang/data_types'
 
 /**
- * Generates a text embedding using an inference endpoint.
+ * Generates dense vector embeddings from text input using a specified inference endpoint. Use this function to generate query vectors for KNN searches against your vectorized data or others dense vector based operations.
  * @esql_function scalar
- * @availability stack since=9.0.0
+ * @availability stack since=9.4.0
  * @availability serverless
  */
-export function TEXT_EMBEDDING(
-  /** The inference endpoint identifier. */
-  endpoint: keyword,
-  /** The text to embed. */
-  input: keyword | text
-): dense_vector
+export function TEXT_EMBEDDING(text: keyword, inferencefunction.inference_id_parameter_name: keyword): dense_vector

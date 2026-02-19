@@ -208,3 +208,33 @@ export type date_range = 'date_range'
  * @esql_data_type
  */
 export type exponential_histogram = 'exponential_histogram'
+
+/**
+ * @esql_data_type
+ */
+export type _tsid = '_tsid'
+
+/**
+ * @esql_data_type
+ */
+export type counter_double = 'counter_double'
+
+/**
+ * @esql_data_type
+ */
+export type counter_integer = 'counter_integer'
+
+/**
+ * @esql_data_type
+ */
+export type counter_long = 'counter_long'
+
+/**
+ * @esql_data_type
+ */
+export type histogram = 'histogram'
+
+/**
+ * @esql_data_type
+ */
+export type int = 'int'

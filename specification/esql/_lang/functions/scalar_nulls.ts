@@ -19,15 +19,16 @@
  */
 
 import {
-  boolean, double, integer, long, unsigned_long, keyword, text,
-  date, datetime, date_nanos, ip, version,
-  geo_point, geo_shape, cartesian_point, cartesian_shape
+  cartesian_point, cartesian_shape, date, date_nanos, exponential_histogram, geo_point,
+  geo_shape, geohash, geohex, geotile, histogram, integer,
+  ip, keyword, long, tdigest, text, version
 } from '@esql/_lang/data_types'
 
 /**
- * Returns the first non-null value from a list.
+ * Returns the first of its arguments that is not null. If all arguments are null, it returns `null`.
  * @esql_function scalar
  */
 export function COALESCE(
-  ...values: Array<boolean | double | integer | long | unsigned_long | keyword | text | date | datetime | date_nanos | ip | version | geo_point | geo_shape | cartesian_point | cartesian_shape>
-): boolean | double | integer | long | unsigned_long | keyword | text | date | datetime | date_nanos | ip | version | geo_point | geo_shape | cartesian_point | cartesian_shape
+  first: boolean | cartesian_point | cartesian_shape | date_nanos | date | histogram | geo_point | geo_shape | geohash | geotile | geohex | integer | ip | keyword | long | tdigest | text | version | exponential_histogram,
+  rest?: boolean | cartesian_point | cartesian_shape | date_nanos | date | histogram | geo_point | geo_shape | geohash | geotile | geohex | integer | ip | keyword | long | tdigest | text | version | exponential_histogram
+): boolean | cartesian_point | cartesian_shape | date_nanos | date | histogram | geo_point | geo_shape | geohash | geotile | geohex | integer | ip | keyword | long | tdigest | version | exponential_histogram

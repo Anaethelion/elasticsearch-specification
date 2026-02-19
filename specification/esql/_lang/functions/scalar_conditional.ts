@@ -19,16 +19,59 @@
  */
 
 import {
-  boolean, double, integer, long, unsigned_long, keyword, text,
-  date, datetime, date_nanos, ip, version,
-  geo_point, geo_shape, cartesian_point, cartesian_shape
+  aggregate_metric_double, cartesian_point, cartesian_shape, date, date_nanos, dense_vector,
+  double, exponential_histogram, geo_point, geo_shape, geohash, geohex,
+  geotile, histogram, integer, ip, keyword, long,
+  tdigest, text, unsigned_long, version
 } from '@esql/_lang/data_types'
 
 /**
- * Accepts pairs of conditions and values. Returns the value of the first condition that evaluates to true.
- * If no condition matches, returns a default value or null.
+ * Accepts pairs of conditions and values. The function returns the value that
  * @esql_function scalar
  */
 export function CASE(
-  ...conditions_and_values: Array<boolean | double | integer | long | unsigned_long | keyword | text | date | datetime | date_nanos | ip | version | geo_point | geo_shape | cartesian_point | cartesian_shape>
-): boolean | double | integer | long | unsigned_long | keyword | text | date | datetime | date_nanos | ip | version | geo_point | geo_shape | cartesian_point | cartesian_shape
+  condition: boolean,
+  trueValue: aggregate_metric_double | boolean | cartesian_point | cartesian_shape | date | date_nanos | dense_vector | double | geo_point | geo_shape | geohash | geotile | geohex | histogram | integer | ip | keyword | long | tdigest | text | unsigned_long | version | exponential_histogram
+): aggregate_metric_double | boolean | cartesian_point | cartesian_shape | date | date_nanos | dense_vector | double | geo_point | geo_shape | geohash | geotile | geohex | histogram | integer | ip | keyword | long | tdigest | unsigned_long | version | exponential_histogram
+
+/**
+ * Limits (or clamps) all input sample values to an upper bound of max. Any value above max is reduced to max.
+ * @esql_function scalar
+ * @availability stack since=9.3.0
+ * @availability serverless
+ * @esql_preview
+ */
+export function CLAMP_MAX(
+  field: double | integer | long | unsigned_long | double | keyword | ip | boolean | date | version,
+  max: double | integer | long | unsigned_long | double | keyword | ip | boolean | date | version
+): double | integer | long | unsigned_long | double | keyword | ip | boolean | date | version
+
+/**
+ * Limits (or clamps) all input sample values to a lower bound of min. Any value below min is set to min.
+ * @esql_function scalar
+ * @availability stack since=9.3.0
+ * @availability serverless
+ * @esql_preview
+ */
+export function CLAMP_MIN(
+  field: double | integer | long | double | unsigned_long | keyword | ip | boolean | date | version,
+  min: double | integer | long | double | unsigned_long | keyword | ip | boolean | date | version
+): double | integer | long | double | unsigned_long | keyword | ip | boolean | date | version
+
+/**
+ * Returns the maximum value from multiple columns. This is similar to esql mv_max except it is intended to run on multiple columns at once.
+ * @esql_function scalar
+ */
+export function GREATEST(
+  first: boolean | date | date_nanos | double | integer | ip | keyword | long | text | version,
+  rest?: boolean | date | date_nanos | double | integer | ip | keyword | long | text | version
+): boolean | date | date_nanos | double | integer | ip | keyword | long | version
+
+/**
+ * Returns the minimum value from multiple columns. This is similar to esql mv_min except it is intended to run on multiple columns at once.
+ * @esql_function scalar
+ */
+export function LEAST(
+  first: boolean | date | date_nanos | double | integer | ip | keyword | long | text | version,
+  rest?: boolean | date | date_nanos | double | integer | ip | keyword | long | text | version
+): boolean | date | date_nanos | double | integer | ip | keyword | long | version

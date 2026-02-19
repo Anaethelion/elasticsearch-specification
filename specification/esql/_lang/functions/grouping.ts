@@ -18,17 +18,52 @@
  * under the License.
  */
 
-import { date, datetime, date_nanos, date_period, time_duration, double, integer, long, keyword, text } from '@esql/_lang/data_types'
+import {
+  date, date_nanos, date_period, double, integer, keyword,
+  long, text, time_duration
+} from '@esql/_lang/data_types'
 
 /**
- * Creates buckets of values. Used for grouping in STATS.
+ * Creates groups of values - buckets - out of a datetime or numeric input.
  * @esql_function grouping
  * @esql_alias BIN
  */
-export function BUCKET(field: date | datetime | date_nanos | double | integer | long, buckets: integer | date_period | time_duration): double | long | date
+export function BUCKET(
+  field: integer | long | double | date | date_nanos,
+  buckets: integer | long | double | date_period | time_duration,
+  from?: integer | long | double | date | keyword | text,
+  to?: integer | long | double | date | keyword | text
+): double | date | date_nanos
 
 /**
- * Groups text values into categories using ML categorization.
- * @esql_function grouping
+ * Options for the CATEGORIZE function.
+ * @esql_map_param_type
  */
-export function CATEGORIZE(field: keyword | text): keyword
+export class CATEGORIZEOptions {
+  /** Analyzer used to convert the field into tokens for text categorization. */
+  analyzer?: keyword
+  /** The output format of the categories. Defaults to regex. */
+  output_format?: keyword
+  /** The minimum percentage of token weight that must match for text to be added to the category bucket. Must be between 1 and 100. The larger the value the narrower the categories. Larger values will increase memory usage and create narrower categories. Defaults to 70. */
+  similarity_threshold?: integer
+}
+
+/**
+ * Groups text messages into categories of similarly formatted text values.
+ * @esql_function grouping
+ * @availability stack since=9.1
+ * @availability serverless
+ */
+export function CATEGORIZE(
+  field: text | keyword,
+  /** @esql_map_param */
+  options?: CATEGORIZEOptions
+): keyword
+
+/**
+ * Creates groups of values - buckets - out of a @timestamp attribute. The size of the buckets must be provided directly.
+ * @esql_function grouping
+ * @availability stack since=9.2.0
+ * @availability serverless
+ */
+export function T_BUCKET(buckets: date_period | time_duration): date | date_nanos

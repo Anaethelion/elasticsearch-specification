@@ -18,19 +18,35 @@
  * under the License.
  */
 
-import { double, keyword } from '@esql/_lang/data_types'
+import {
+  cartesian_point, date, date_nanos, double, geo_point, integer,
+  keyword, long, text, time_duration
+} from '@esql/_lang/data_types'
 
 /**
- * Applies a decay function to compute a score that decreases with distance from an origin.
+ * Options for the DECAY function.
+ * @esql_map_param_type
+ */
+export class DECAYOptions {
+  /** Distance from the origin where no decay occurs. */
+  offset?: double | integer | long | time_duration | keyword | text
+  /** Multiplier value returned at the scale distance from the origin. */
+  decay?: double
+  /** Decay function to use: linear, exponential or gaussian. */
+  type?: keyword
+}
+
+/**
+ * Calculates a relevance score that decays based on the distance of a numeric, spatial or date type value from a target origin, using configurable decay functions.
  * @esql_function scalar
- * @availability stack since=9.1.0
+ * @availability stack since=9.3.0
  * @availability serverless
+ * @esql_preview
  */
 export function DECAY(
-  function_type: keyword,
-  field: double,
-  origin: double,
-  scale: double,
-  offset?: double,
-  decay?: double
+  value: double | integer | long | date | date_nanos | geo_point | cartesian_point,
+  origin: double | integer | long | date | date_nanos | geo_point | cartesian_point,
+  scale: double | integer | long | time_duration | keyword | text,
+  /** @esql_map_param */
+  options?: DECAYOptions
 ): double

@@ -18,52 +18,90 @@
  * under the License.
  */
 
-import { date, datetime, date_nanos, date_period, time_duration, keyword, integer, long } from '@esql/_lang/data_types'
+import {
+  date, date_nanos, date_period, integer, keyword, long,
+  text, time_duration
+} from '@esql/_lang/data_types'
 
 /**
- * Computes the difference between two dates.
+ * Subtracts the `startTimestamp` from the `endTimestamp` and returns the difference in multiples of `unit`.
  * @esql_function scalar
  */
-export function DATE_DIFF(unit: keyword, start: date | datetime | date_nanos, end: date | datetime | date_nanos): integer
+export function DATE_DIFF(
+  unit: keyword | text,
+  startTimestamp: date | date_nanos,
+  endTimestamp: date | date_nanos
+): integer
 
 /**
- * Extracts a part of a date as an integer.
+ * Extracts parts of a date, like year, month, day, hour.
  * @esql_function scalar
  */
-export function DATE_EXTRACT(part: keyword, date_value: date | datetime | date_nanos): long
+export function DATE_EXTRACT(datePart: keyword | text, date: date | date_nanos): long
 
 /**
- * Formats a date as a string.
+ * Returns a string representation of a date, in the provided format.
  * @esql_function scalar
  */
-export function DATE_FORMAT(format: keyword, date_value: date | datetime | date_nanos): keyword
+export function DATE_FORMAT(dateFormat?: keyword | text, date: date | date_nanos): keyword
 
 /**
- * Parses a string into a date.
+ * Options for the DATE_PARSE function.
+ * @esql_map_param_type
+ */
+export class DATE_PARSEOptions {
+  /** Coordinated Universal Time (UTC) offset or IANA time zone used to convert date values in the query string to UTC. */
+  time_zone_param_name?: keyword
+  /** The locale to use when parsing the date, relevant when parsing month names or week days. */
+  locale_param_name?: keyword
+}
+
+/**
+ * Returns a date by parsing the second argument using the format specified in the first argument.
  * @esql_function scalar
  */
-export function DATE_PARSE(format: keyword, date_string?: keyword): date
+export function DATE_PARSE(
+  datePattern?: keyword | text,
+  dateString: keyword | text,
+  /** @esql_map_param */
+  options?: DATE_PARSEOptions
+): date
 
 /**
- * Truncates a date to a given interval.
+ * Rounds down a date to the closest interval since epoch, which starts at `0001-01-01T00:00:00Z`.
  * @esql_function scalar
  */
-export function DATE_TRUNC(interval: date_period | time_duration, date_value: date | datetime | date_nanos): date | datetime | date_nanos
+export function DATE_TRUNC(interval: date_period | time_duration, date: date | date_nanos): date | date_nanos
 
 /**
- * Returns the name of the day of the week.
+ * Returns the name of the weekday for date based on the configured Locale.
  * @esql_function scalar
+ * @availability stack since=9.2.0
+ * @availability serverless
  */
-export function DAY_NAME(date_value: date | datetime | date_nanos): keyword
+export function DAY_NAME(date: date | date_nanos): keyword
 
 /**
- * Returns the name of the month.
+ * Returns the month name for the provided date based on the configured Locale.
  * @esql_function scalar
+ * @availability stack since=9.2.0
+ * @availability serverless
  */
-export function MONTH_NAME(date_value: date | datetime | date_nanos): keyword
+export function MONTH_NAME(date: date | date_nanos): keyword
 
 /**
- * Returns the current date and time.
+ * Returns current date and time.
  * @esql_function scalar
  */
 export function NOW(): date
+
+/**
+ * Filters data for the given time range using the @timestamp attribute.
+ * @esql_function scalar
+ * @availability stack since=9.3.0
+ * @availability serverless
+ */
+export function T_RANGE(
+  start_time_or_offset_parameter: time_duration | date_period | date | date_nanos | keyword | long,
+  end_time_parameter?: keyword | long | date | date_nanos
+): boolean

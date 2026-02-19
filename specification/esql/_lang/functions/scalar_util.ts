@@ -18,32 +18,10 @@
  * under the License.
  */
 
-import { integer, ip, keyword, text } from '@esql/_lang/data_types'
+import { time_duration } from '@esql/_lang/data_types'
 
 /**
- * Returns true if the provided IP is contained in one of the provided CIDR blocks.
+ * Sleeps for a duration for every row. For debug purposes only.
  * @esql_function scalar
  */
-export function CIDR_MATCH(ip: ip, blockX: keyword | text): boolean
-
-/**
- * Truncates an IP to a given prefix length.
- * @esql_function scalar
- */
-export function IP_PREFIX(
-  ip: ip,
-  prefixLengthV4: integer,
-  prefixLengthV6: integer
-): ip
-
-/**
- * Returns the direction type (inbound, outbound, internal, external) given a source IP address, destination IP address, and a list of internal networks.
- * @esql_function scalar
- * @esql_alias NETDIR
- * @esql_preview
- */
-export function NETWORK_DIRECTION(
-  source_ip: ip,
-  destination_ip: ip,
-  internal_networks: keyword | text
-): keyword
+export function DELAY(ms: time_duration): boolean
