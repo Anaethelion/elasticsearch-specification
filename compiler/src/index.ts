@@ -23,6 +23,7 @@ import { argv } from 'zx'
 import Compiler from './compiler'
 import addInfo from './steps/add-info'
 import validateModel from './steps/validate-model'
+import validateEsqlModel from './steps/validate-esql-model'
 import readDefinitionValidation from './steps/read-definition-validation'
 import addDeprecation from './steps/add-deprecation'
 import ExamplesProcessor from './steps/add-examples'
@@ -72,6 +73,7 @@ compiler
   .step(addDeprecation)
   .step(readDefinitionValidation)
   .step(validateModel)
+  .step(validateEsqlModel)
   .step(addExamples)
   .write()
   .then(() => {

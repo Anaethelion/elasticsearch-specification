@@ -1353,6 +1353,8 @@ export function verifyUniqueness (project: Project): void {
   // get global `_types`
   for (const sourceFile of project.getSourceFiles()) {
     const path = dirname(sourceFile.getFilePath().replace(/.*[/\\]specification[/\\]?/, ''))
+    // ES|QL language files live in their own namespace and may reuse type names
+    if (path.includes('esql/_lang') || path.includes('esql\\_lang')) continue
     if (!path.startsWith('_types')) continue
 
     for (const declaration of sourceFile.getClasses()) {
@@ -1385,6 +1387,7 @@ export function verifyUniqueness (project: Project): void {
   // nested `_types`
   for (const sourceFile of project.getSourceFiles()) {
     const path = dirname(sourceFile.getFilePath().replace(/.*[/\\]specification[/\\]?/, ''))
+    if (path.includes('esql/_lang') || path.includes('esql\\_lang')) continue
     if (path.startsWith('_types')) continue
     if (!path.includes('_types')) continue
 
@@ -1427,6 +1430,7 @@ export function verifyUniqueness (project: Project): void {
   // every other namespaced type
   for (const sourceFile of project.getSourceFiles()) {
     const path = dirname(sourceFile.getFilePath().replace(/.*[/\\]specification[/\\]?/, ''))
+    if (path.includes('esql/_lang') || path.includes('esql\\_lang')) continue
     if (path.includes('_types')) continue
 
     const namespace = path.startsWith('_global') ? `_global${'/'}${path.split('/')[1]}` : path.split('/')[0]

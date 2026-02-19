@@ -55,6 +55,7 @@ import {
   sourceLocation, sortTypeDefinitions, parseDeprecation,
   mediaTypeToStringArray
 } from './utils'
+import { compileEsqlLanguageModel } from './build-esql-model'
 
 export function compileSpecification (specsFolder: string, outputFolder: string): model.Model {
   const tsConfigFilePath = join(specsFolder, 'tsconfig.json')
@@ -77,6 +78,19 @@ export function compileSpecification (specsFolder: string, outputFolder: string)
   }
   const definedButNeverUsed: string[] = []
   for (const sourceFile of project.getSourceFiles()) {
+    // ES|QL language files are compiled separately via compileEsqlLanguageModel
+    if (sourceFile.getFilePath().includes('esql/_lang/')) continue
+
+    for (const stmt of sourceFile.getStatements()) {
+      if (Node.isFunctionDeclaration(stmt)) {
+        assert(
+          stmt,
+          false,
+          `Function declarations are only allowed in specification/esql/_lang/. Move this to the appropriate file under esql/_lang/functions/.`
+        )
+      }
+    }
+
     for (const declaration of sourceFile.getClasses()) {
       if (customTypes.includes(declaration.getName() ?? '')) continue
       declarations.classes.push(declaration)
@@ -152,6 +166,12 @@ export function compileSpecification (specsFolder: string, outputFolder: string)
   const sortedEndpointKeys = Object.keys(endpointMappings).sort()
   for (const key of sortedEndpointKeys) {
     model.endpoints.push(endpointMappings[key])
+  }
+
+  // Compile the ES|QL language model from files under esql/_lang/
+  const esqlModel = compileEsqlLanguageModel(project)
+  if (esqlModel != null) {
+    model.esql = esqlModel
   }
 
   return model
