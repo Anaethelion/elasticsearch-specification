@@ -264,6 +264,7 @@ Finally open a pull request with your changes. Please open it from a branch in t
 - [Behaviors](./docs/behaviors.md)
 - [Compiler](./docs/compiler.md)
 - [Documenting the API specification](./docs/doc-comments-guide.md)
+- [ES|QL Language Specification](./docs/esql-language.md)
 - [Known issues](./docs/known-issues.md)
 - [Modeling Guide](./docs/modeling-guide.md)
 - [Schema structure](./docs/schema-structure.md)

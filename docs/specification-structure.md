@@ -45,3 +45,14 @@ For example: [`/specification/_global/search`](../specification/_global/search).
 
 The specification has a set of custom types used to define complex structures
 or behaviors. Those types must be placed in [`/specification/_spec_utils`](../specification/_spec_utils).
+
+### ES|QL language definitions
+
+The directory [`/specification/esql/_lang/`](../specification/esql/_lang/) contains the
+ES|QL language model: data types, commands, operators, and functions. This directory
+follows its own conventions (UPPERCASE names, body-less function declarations, custom
+`@esql_*` JSDoc annotations) and is processed by a dedicated compiler module rather than
+the standard class/interface visitors. Type names in `_lang` intentionally overlap with
+global types and are excluded from the uniqueness checks.
+
+See the [ES|QL Language Specification](./esql-language.md) guide for full details.

@@ -98,4 +98,28 @@ This namespace houses all the primitive types that you might need.
 - `void`
 - `binary`
 
+## ES|QL Language Model
+
+The schema includes an optional top-level `esql` key containing the ES|QL language model:
+data types, commands, operators, and functions. This section is produced from the TypeScript
+files under `specification/esql/_lang/` and is intended for language clients that need to
+generate query builders or provide autocomplete for ES|QL.
+
+```jsonc
+{
+  "_info": { ... },
+  "endpoints": [...],
+  "types": [...],
+  "esql": {
+    "dataTypes": [...],
+    "commands": [...],
+    "operators": [...],
+    "functions": [...]
+  }
+}
+```
+
+For the full documentation of the ES|QL language model, including how to add or modify
+definitions and the available JSDoc annotations, see the
+[ES|QL Language Specification](./esql-language.md) guide.
 

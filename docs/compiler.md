@@ -61,6 +61,23 @@ Those types are also tracked in [`compiler/model/utils.ts`](../compiler/src/mode
 because they can't be added in the output JSON, as we only need them to let the compiler
 know how those structures should be represented in the output JSON.
 
+## ES|QL Language Model
+
+In addition to the HTTP API types, the compiler processes the ES|QL language definitions
+under `specification/esql/_lang/`. These files use a different set of JSDoc annotations
+(`@esql_function`, `@esql_command`, `@esql_operator`, `@esql_data_type`, etc.) and include
+TypeScript function declarations (without bodies) to model ES|QL functions.
+
+The ES|QL compilation is handled by a dedicated module,
+[`compiler/src/model/build-esql-model.ts`](../compiler/src/model/build-esql-model.ts),
+which is called from `compileSpecification()` in `build-model.ts`. The `_lang` files are
+excluded from the standard class/interface/enum/type-alias visitors to avoid conflicts.
+A validation step in [`compiler/src/steps/validate-esql-model.ts`](../compiler/src/steps/validate-esql-model.ts)
+checks naming conventions and required fields.
+
+For full details on the annotation syntax and file structure, see the
+[ES|QL Language Specification](./esql-language.md) guide.
+
 ## Useful links
 
 - [TypeScript Handbook](https://www.typescriptlang.org/docs/handbook/)
