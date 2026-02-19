@@ -480,6 +480,156 @@ export class UrlTemplate {
   deprecation?: Deprecation
 }
 
+// ------------------------------------------------------------------------------------------------
+// ES|QL Language Model
+
+/**
+ * An ES|QL data type that can appear in function signatures, operator definitions, etc.
+ */
+export class EsqlDataType {
+  name: string
+  description?: string
+  /** Whether this type can appear in source data (e.g. FROM fields) */
+  sourceCapable?: boolean
+  /** Whether this type can be produced by functions or expressions */
+  resultCapable?: boolean
+}
+
+/**
+ * A named clause within an ES|QL command (e.g. BY in STATS, METADATA in FROM).
+ */
+export class EsqlCommandClause {
+  /** The clause keyword as written in the language (e.g. "BY", "METADATA", "ON", "WITH", "AS") */
+  keyword: string
+  description?: string
+  required: boolean
+  type: ValueOf
+}
+
+/**
+ * An ES|QL command (e.g. FROM, KEEP, STATS, WHERE).
+ */
+export class EsqlCommand {
+  /** Uppercase command name as used in the language (e.g. "FROM", "KEEP", "STATS") */
+  name: string
+  position: 'source' | 'processing'
+  description?: string
+  /** The main/positional argument of the command */
+  mainArgument?: ValueOf
+  clauses: EsqlCommandClause[]
+  availability?: Availabilities
+  preview?: boolean
+}
+
+/**
+ * A parameter of an ES|QL operator.
+ */
+export class EsqlOperatorParam {
+  name: string
+  types: string[]
+  description?: string
+}
+
+/**
+ * An ES|QL operator (e.g. +, ==, NOT, IS NULL).
+ * Modeled separately from functions as operators have fixity and precedence.
+ */
+export class EsqlOperator {
+  /** Uppercase identifier (e.g. "ADD", "EQUALS", "NOT", "IS_NULL") */
+  name: string
+  /** The operator symbol as written in ES|QL (e.g. "+", "==", "NOT", "IS NULL") */
+  symbol: string
+  fixity: 'prefix' | 'infix' | 'postfix'
+  /** Lower number = binds tighter */
+  precedenceGroup: number
+  description?: string
+  params: EsqlOperatorParam[]
+  returnType: string[]
+  availability?: Availabilities
+}
+
+/**
+ * A hint for an ES|QL function parameter (e.g. inference endpoint constraints).
+ */
+export class EsqlParamHint {
+  entityType?: string
+  constraints?: Array<{ name: string, value: string }>
+}
+
+/**
+ * A parameter of an ES|QL function.
+ */
+export class EsqlFunctionParam {
+  name: string
+  types: string[]
+  description?: string
+  optional: boolean
+  since?: string
+  hint?: EsqlParamHint
+}
+
+/**
+ * An entry within an ES|QL map parameter (e.g. an option key in MATCH options).
+ */
+export class EsqlMapParamEntry {
+  name: string
+  types: string[]
+  valueHint?: string[]
+  description?: string
+  optional: boolean
+}
+
+/**
+ * A map parameter of an ES|QL function (e.g. MATCH options).
+ */
+export class EsqlMapParam {
+  name: string
+  entries: EsqlMapParamEntry[]
+  description?: string
+  optional: boolean
+}
+
+/**
+ * An example of using an ES|QL function.
+ */
+export class EsqlFunctionExample {
+  description?: string
+  query: string
+  explanation?: string
+}
+
+/**
+ * An ES|QL function definition (e.g. ABS, AVG, MATCH).
+ */
+export class EsqlFunctionDefinition {
+  /** Uppercase function name as used in the language (e.g. "ABS", "AVG", "MATCH") */
+  name: string
+  /** Uppercase aliases (e.g. ["BIN"] for BUCKET) */
+  aliases?: string[]
+  kind: 'scalar' | 'aggregate' | 'grouping' | 'time_series_aggregate'
+  description?: string
+  detailedDescription?: string
+  note?: string
+  preview?: boolean
+  params: EsqlFunctionParam[]
+  mapParams?: EsqlMapParam[]
+  returnType: string[]
+  availability?: Availabilities
+  examples?: EsqlFunctionExample[]
+}
+
+/**
+ * The complete ES|QL language model: data types, commands, operators, and functions.
+ */
+export class EsqlLanguageModel {
+  dataTypes: EsqlDataType[]
+  commands: EsqlCommand[]
+  operators: EsqlOperator[]
+  functions: EsqlFunctionDefinition[]
+}
+
+// ------------------------------------------------------------------------------------------------
+
 export class Model {
   _info?: {
     title: string
@@ -491,4 +641,6 @@ export class Model {
 
   types: TypeDefinition[]
   endpoints: Endpoint[]
+  /** The ES|QL language model: functions, commands, operators, and data types */
+  esql?: EsqlLanguageModel
 }
