@@ -86,8 +86,8 @@ must be specified. */
 /**
  * Use `CHUNK` to split a text field into smaller chunks.
  * @esql_function scalar
- * @availability stack since=9.3.0
- * @availability serverless
+ * @availability stack since=9.3.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function CHUNK(
@@ -105,8 +105,8 @@ export function CONCAT(string1: keyword | text, string2: keyword | text): keywor
 /**
  * Returns a boolean that indicates whether a keyword substring is within another string.
  * @esql_function scalar
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function CONTAINS(string: keyword | text, substring: keyword | text): boolean
 
@@ -263,8 +263,8 @@ This allows better control of inference costs by limiting the size of tokens per
 /**
  * Use `TOP_SNIPPETS` to extract the best snippets for a given query string from a text field.
  * @esql_function scalar
- * @availability stack since=9.3.0
- * @availability serverless
+ * @availability stack since=9.3.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function TOP_SNIPPETS(

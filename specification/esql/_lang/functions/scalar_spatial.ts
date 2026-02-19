@@ -50,6 +50,8 @@ export function ST_DISTANCE(geomA: geo_point | cartesian_point, geomB: geo_point
 /**
  * Determines the minimum bounding box of the supplied geometry.
  * @esql_function scalar
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function ST_ENVELOPE(
@@ -59,8 +61,8 @@ export function ST_ENVELOPE(
 /**
  * Calculates the `geohash` of the supplied geo_point at the specified precision.
  * @esql_function scalar
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function ST_GEOHASH(
@@ -72,8 +74,8 @@ export function ST_GEOHASH(
 /**
  * Calculates the `geohex`, the H3 cell-id, of the supplied geo_point at the specified precision.
  * @esql_function scalar
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function ST_GEOHEX(
@@ -85,8 +87,8 @@ export function ST_GEOHEX(
 /**
  * Calculates the `geotile` of the supplied geo_point at the specified precision.
  * @esql_function scalar
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function ST_GEOTILE(
@@ -107,8 +109,8 @@ export function ST_INTERSECTS(
 /**
  * Counts the number of points in the supplied geometry.
  * @esql_function scalar
- * @availability stack since=9.4.0
- * @availability serverless
+ * @availability stack since=9.4.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function ST_NPOINTS(geometry: geo_point | geo_shape | cartesian_point | cartesian_shape): integer
@@ -116,8 +118,8 @@ export function ST_NPOINTS(geometry: geo_point | geo_shape | cartesian_point | c
 /**
  * Simplifies the input geometry by applying the Douglas-Peucker algorithm with a specified tolerance. Vertices that fall within the tolerance distance from the simplified shape are removed. Note that the resulting geometry may be invalid, even if the original input was valid.
  * @esql_function scalar
- * @availability stack since=9.4.0
- * @availability serverless
+ * @availability stack since=9.4.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function ST_SIMPLIFY(
@@ -143,6 +145,8 @@ export function ST_X(point: geo_point | cartesian_point): double
 /**
  * Extracts the maximum value of the `x` coordinates from the supplied geometry. If the geometry is of type `geo_point` or `geo_shape` this is equivalent to extracting the maximum `longitude` value.
  * @esql_function scalar
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function ST_XMAX(point: geo_point | geo_shape | cartesian_point | cartesian_shape): double
@@ -150,6 +154,8 @@ export function ST_XMAX(point: geo_point | geo_shape | cartesian_point | cartesi
 /**
  * Extracts the minimum value of the `x` coordinates from the supplied geometry. If the geometry is of type `geo_point` or `geo_shape` this is equivalent to extracting the minimum `longitude` value.
  * @esql_function scalar
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function ST_XMIN(point: geo_point | geo_shape | cartesian_point | cartesian_shape): double
@@ -163,6 +169,8 @@ export function ST_Y(point: geo_point | cartesian_point): double
 /**
  * Extracts the maximum value of the `y` coordinates from the supplied geometry. If the geometry is of type `geo_point` or `geo_shape` this is equivalent to extracting the maximum `latitude` value.
  * @esql_function scalar
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function ST_YMAX(point: geo_point | geo_shape | cartesian_point | cartesian_shape): double
@@ -170,6 +178,8 @@ export function ST_YMAX(point: geo_point | geo_shape | cartesian_point | cartesi
 /**
  * Extracts the minimum value of the `y` coordinates from the supplied geometry. If the geometry is of type `geo_point` or `geo_shape` this is equivalent to extracting the minimum `latitude` value.
  * @esql_function scalar
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function ST_YMIN(point: geo_point | geo_shape | cartesian_point | cartesian_shape): double

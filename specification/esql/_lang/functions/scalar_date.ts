@@ -76,16 +76,16 @@ export function DATE_TRUNC(interval: date_period | time_duration, date: date | d
 /**
  * Returns the name of the weekday for date based on the configured Locale.
  * @esql_function scalar
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function DAY_NAME(date: date | date_nanos): keyword
 
 /**
  * Returns the month name for the provided date based on the configured Locale.
  * @esql_function scalar
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function MONTH_NAME(date: date | date_nanos): keyword
 
@@ -98,8 +98,8 @@ export function NOW(): date
 /**
  * Filters data for the given time range using the @timestamp attribute.
  * @esql_function scalar
- * @availability stack since=9.3.0
- * @availability serverless
+ * @availability stack since=9.3.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function T_RANGE(
   start_time_or_offset_parameter: time_duration | date_period | date | date_nanos | keyword | long,

@@ -51,8 +51,8 @@ export class CATEGORIZEOptions {
 /**
  * Groups text messages into categories of similarly formatted text values.
  * @esql_function grouping
- * @availability stack since=9.1
- * @availability serverless
+ * @availability stack since=9.1 stability=stable
+ * @availability serverless stability=stable
  */
 export function CATEGORIZE(
   field: text | keyword,
@@ -63,7 +63,7 @@ export function CATEGORIZE(
 /**
  * Creates groups of values - buckets - out of a @timestamp attribute. The size of the buckets must be provided directly.
  * @esql_function grouping
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function T_BUCKET(buckets: date_period | time_duration): date | date_nanos

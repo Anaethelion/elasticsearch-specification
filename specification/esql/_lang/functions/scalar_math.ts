@@ -88,8 +88,8 @@ export function CEIL(number: double | integer | long | unsigned_long): double | 
 /**
  * Returns a value with the magnitude of the first argument and the sign of the second argument.
  * @esql_function scalar
- * @availability stack since=9.1.0
- * @availability serverless
+ * @availability stack since=9.1.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function COPY_SIGN(magnitude: double | integer | long, sign: double | integer | long): double | integer | long
 
@@ -174,8 +174,8 @@ export function ROUND(
 /**
  * Rounds down to one of a list of fixed points.
  * @esql_function scalar
- * @availability stack since=9.1.0
- * @availability serverless
+ * @availability stack since=9.1.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function ROUND_TO(
@@ -186,8 +186,8 @@ export function ROUND_TO(
 /**
  * Returns the result of `d * 2 ^ scaleFactor`,
  * @esql_function scalar
- * @availability stack since=9.1.0
- * @availability serverless
+ * @availability stack since=9.1.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function SCALB(d: double | integer | long | unsigned_long, scaleFactor: integer | long): double
 

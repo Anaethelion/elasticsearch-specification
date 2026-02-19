@@ -29,8 +29,8 @@ import {
 /**
  * Returns true if the input expression yields no non-null values within the current aggregation context. Otherwise it returns false.
  * @esql_function aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function ABSENT(
   field: aggregate_metric_double | boolean | cartesian_point | cartesian_shape | date | date_nanos | dense_vector | double | geo_point | geo_shape | geohash | geotile | geohex | histogram | integer | ip | keyword | long | text | unsigned_long | version | exponential_histogram | tdigest
@@ -39,8 +39,8 @@ export function ABSENT(
 /**
  * Calculates the absence of a field in the output result over time range.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function ABSENT_OVER_TIME(
@@ -57,8 +57,8 @@ export function AVG(number: aggregate_metric_double | exponential_histogram | td
 /**
  * Calculates the average over time of a numeric field.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function AVG_OVER_TIME(
@@ -86,8 +86,8 @@ export function COUNT_DISTINCT(
 /**
  * Calculates the count of distinct values over time for a field.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function COUNT_DISTINCT_OVER_TIME(
@@ -98,8 +98,8 @@ export function COUNT_DISTINCT_OVER_TIME(
 /**
  * Calculates the count over time value of a field.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function COUNT_OVER_TIME(
@@ -110,8 +110,8 @@ export function COUNT_OVER_TIME(
 /**
  * Calculates the absolute change of a gauge field in a time window.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function DELTA(field: long | integer | double, window?: time_duration): double
@@ -119,8 +119,8 @@ export function DELTA(field: long | integer | double, window?: time_duration): d
 /**
  * Calculates the derivative over time of a numeric field using linear regression.
  * @esql_function time_series_aggregate
- * @availability stack since=9.3.0
- * @availability serverless
+ * @availability stack since=9.3.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function DERIV(field: long | integer | double, window?: time_duration): double
@@ -128,6 +128,8 @@ export function DERIV(field: long | integer | double, window?: time_duration): d
 /**
  * This function calculates the earliest occurrence of the search field
  * @esql_function aggregate
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function FIRST(
@@ -138,8 +140,8 @@ export function FIRST(
 /**
  * Calculates the earliest value of a field, where recency determined by the `@timestamp` field.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function FIRST_OVER_TIME(
@@ -163,8 +165,8 @@ export function HISTOGRAM_MERGE_OVER_TIME(
 /**
  * Calculates the idelta of a gauge. idelta is the absolute change between the last two data points (it ignores all but the last two data points in each time period). This function is very similar to delta, but is more responsive to recent changes.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function IDELTA(field: long | integer | double, window?: time_duration): double
@@ -172,8 +174,8 @@ export function IDELTA(field: long | integer | double, window?: time_duration): 
 /**
  * Calculates the absolute increase of a counter field in a time window.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function INCREASE(field: counter_long | counter_integer | counter_double, window?: time_duration): double
@@ -181,8 +183,8 @@ export function INCREASE(field: counter_long | counter_integer | counter_double,
 /**
  * Calculates the irate of a counter field. irate is the per-second rate of increase between the last two data points (it ignores all but the last two data points in each time period). This function is very similar to rate, but is more responsive to recent changes in the rate of increase.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function IRATE(field: counter_long | counter_integer | counter_double, window?: time_duration): double
@@ -190,6 +192,8 @@ export function IRATE(field: counter_long | counter_integer | counter_double, wi
 /**
  * This function calculates the latest occurrence of the search field
  * @esql_function aggregate
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function LAST(
@@ -200,8 +204,8 @@ export function LAST(
 /**
  * Calculates the latest value of a field, where recency determined by the `@timestamp` field.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function LAST_OVER_TIME(
@@ -220,8 +224,8 @@ export function MAX(
 /**
  * Calculates the maximum over time value of a field.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function MAX_OVER_TIME(
@@ -252,8 +256,8 @@ export function MIN(
 /**
  * Calculates the minimum over time value of a field.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function MIN_OVER_TIME(
@@ -273,8 +277,8 @@ export function PERCENTILE(
 /**
  * Calculates the percentile over time of a field.
  * @esql_function time_series_aggregate
- * @availability stack since=9.3.0
- * @availability serverless
+ * @availability stack since=9.3.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function PERCENTILE_OVER_TIME(
@@ -285,8 +289,8 @@ export function PERCENTILE_OVER_TIME(
 /**
  * Returns true if the input expression yields any non-null values within the current aggregation context. Otherwise it returns false.
  * @esql_function aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function PRESENT(
   field: aggregate_metric_double | boolean | cartesian_point | cartesian_shape | date | date_nanos | dense_vector | double | geo_point | geo_shape | geohash | geotile | geohex | integer | histogram | ip | keyword | long | text | unsigned_long | version | exponential_histogram | tdigest
@@ -295,8 +299,8 @@ export function PRESENT(
 /**
  * Calculates the presence of a field in the output result over time range.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function PRESENT_OVER_TIME(
@@ -307,8 +311,8 @@ export function PRESENT_OVER_TIME(
 /**
  * Calculates the per-second average rate of increase of a counter. Rate calculations account for breaks in monotonicity, such as counter resets when a service restarts, and extrapolate values within each bucketed time interval. Rate is the most appropriate aggregate function for counters. It is only allowed in a STATS command under a `TS` source command, to be properly applied per time series.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function RATE(field: counter_long | counter_integer | counter_double, window?: time_duration): double
@@ -316,8 +320,8 @@ export function RATE(field: counter_long | counter_integer | counter_double, win
 /**
  * Collects sample values for a field.
  * @esql_function aggregate
- * @availability stack since=9.1.0
- * @availability serverless
+ * @availability stack since=9.1.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function SAMPLE(
   field: boolean | cartesian_point | cartesian_shape | date | date_nanos | double | geo_point | geo_shape | geohash | geotile | geohex | integer | ip | keyword | long | unsigned_long | text | version,
@@ -327,6 +331,8 @@ export function SAMPLE(
 /**
  * Calculate the spatial centroid over a field with spatial geometry type.
  * @esql_function aggregate
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function ST_CENTROID_AGG(
@@ -336,6 +342,8 @@ export function ST_CENTROID_AGG(
 /**
  * Calculate the spatial extent over a field with geometry type. Returns a bounding box for all values of the field.
  * @esql_function aggregate
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function ST_EXTENT_AGG(
@@ -351,8 +359,8 @@ export function STD_DEV(number: double | integer | long): double
 /**
  * Calculates the population standard deviation over time of a numeric field.
  * @esql_function time_series_aggregate
- * @availability stack since=9.3.0
- * @availability serverless
+ * @availability stack since=9.3.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function STDDEV_OVER_TIME(field: double | integer | long, window?: time_duration): double
@@ -368,8 +376,8 @@ export function SUM(
 /**
  * Calculates the sum over time value of a field.
  * @esql_function time_series_aggregate
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function SUM_OVER_TIME(
@@ -391,6 +399,8 @@ export function TOP(
 /**
  * Returns unique values as a multivalued field. The order of the returned values isn’t guaranteed.
  * @esql_function aggregate
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function VALUES(
@@ -408,8 +418,8 @@ export function VARIANCE(number: double | integer | long): double
  * Calculates the population variance over time of a numeric field.
  * @esql_function time_series_aggregate
  * @esql_alias STDVAR_OVER_TIME
- * @availability stack since=9.3.0
- * @availability serverless
+ * @availability stack since=9.3.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function VARIANCE_OVER_TIME(field: double | integer | long, window?: time_duration): double

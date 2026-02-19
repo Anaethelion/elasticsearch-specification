@@ -39,8 +39,8 @@ export class DECAYOptions {
 /**
  * Calculates a relevance score that decays based on the distance of a numeric, spatial or date type value from a target origin, using configurable decay functions.
  * @esql_function scalar
- * @availability stack since=9.3.0
- * @availability serverless
+ * @availability stack since=9.3.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function DECAY(

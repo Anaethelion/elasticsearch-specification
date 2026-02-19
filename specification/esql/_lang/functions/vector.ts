@@ -44,8 +44,8 @@ export class KNNOptions {
 /**
  * Finds the k nearest vectors to a query vector, as measured by a similarity metric. knn function finds nearest vectors through approximate search on indexed dense_vectors or semantic_text fields.
  * @esql_function scalar
- * @availability stack since=9.4.0
- * @availability serverless
+ * @availability stack since=9.4.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function KNN(
   field: dense_vector | text,
@@ -57,46 +57,48 @@ export function KNN(
 /**
  * Calculates the cosine similarity between two dense_vectors.
  * @esql_function scalar
- * @availability stack since=9.4.0
- * @availability serverless
+ * @availability stack since=9.4.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function V_COSINE(left: dense_vector, right: dense_vector): double
 
 /**
  * Calculates the dot product between two dense_vectors.
  * @esql_function scalar
- * @availability stack since=9.4.0
- * @availability serverless
+ * @availability stack since=9.4.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function V_DOT_PRODUCT(left: dense_vector, right: dense_vector): double
 
 /**
  * Calculates the Hamming distance between two dense vectors.
  * @esql_function scalar
- * @availability stack since=9.4.0
- * @availability serverless
+ * @availability stack since=9.4.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function V_HAMMING(left: dense_vector, right: dense_vector): double
 
 /**
  * Calculates the l1 norm between two dense_vectors.
  * @esql_function scalar
- * @availability stack since=9.4.0
- * @availability serverless
+ * @availability stack since=9.4.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function V_L1_NORM(left: dense_vector, right: dense_vector): double
 
 /**
  * Calculates the l2 norm between two dense_vectors.
  * @esql_function scalar
- * @availability stack since=9.4.0
- * @availability serverless
+ * @availability stack since=9.4.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function V_L2_NORM(left: dense_vector, right: dense_vector): double
 
 /**
  * Calculates the magnitude of a dense_vector.
  * @esql_function scalar
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function V_MAGNITUDE(input: dense_vector): double

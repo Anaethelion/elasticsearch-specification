@@ -45,8 +45,8 @@ export function FROM_BASE64(string: keyword | text): keyword
  * Encode a numeric to an aggregate_metric_double.
  * @esql_function scalar
  * @esql_alias TO_AGGREGATEMETRICDOUBLE
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function TO_AGGREGATE_METRIC_DOUBLE(
@@ -89,6 +89,8 @@ export function TO_DATE_NANOS(field: date | date_nanos | keyword | text | double
  * Converts an input value to a `date_range` value.
  * @esql_function scalar
  * @esql_alias TO_DATERANGE
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function TO_DATE_RANGE(field: date_range): date_range
@@ -115,8 +117,8 @@ export function TO_DEGREES(number: double | integer | long | unsigned_long): dou
 /**
  * Converts a multi-valued input of numbers, or a hexadecimal string, to a dense_vector.
  * @esql_function scalar
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function TO_DENSE_VECTOR(field: double | long | integer | keyword): dense_vector
@@ -133,6 +135,8 @@ export function TO_DOUBLE(
 /**
  * Converts an input value to a `geohash` value.
  * @esql_function scalar
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function TO_GEOHASH(field: geohash | long | keyword | text): geohash
@@ -140,6 +144,8 @@ export function TO_GEOHASH(field: geohash | long | keyword | text): geohash
 /**
  * Converts an input value to a `geohex` value.
  * @esql_function scalar
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function TO_GEOHEX(field: geohex | long | keyword | text): geohex
@@ -159,6 +165,8 @@ export function TO_GEOSHAPE(field: geo_point | geo_shape | geohash | geohex | ge
 /**
  * Converts an input value to a `geotile` value.
  * @esql_function scalar
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function TO_GEOTILE(field: geotile | long | keyword | text): geotile
@@ -233,6 +241,8 @@ export function TO_TIMEDURATION(field: time_duration | keyword | text): time_dur
  * @esql_function scalar
  * @esql_alias TO_ULONG
  * @esql_alias TO_UL
+ * @availability stack stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function TO_UNSIGNED_LONG(
@@ -249,23 +259,23 @@ export function TO_VERSION(field: keyword | text | version): version
 /**
  * URL-decodes the input, or returns `null` and adds a warning header to the response if the input cannot be decoded.
  * @esql_function scalar
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function URL_DECODE(string: keyword | text): keyword
 
 /**
  * URL-encodes the input. All characters are percent-encoded (https://en.wikipedia.org/wiki/Percent-encoding) except for alphanumerics, `.`, `-`, `_`, and `~`. Spaces are encoded as `+`.
  * @esql_function scalar
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function URL_ENCODE(string: keyword | text): keyword
 
 /**
  * URL-encodes the input. All characters are percent-encoded (https://en.wikipedia.org/wiki/Percent-encoding) except for alphanumerics, `.`, `-`, `_`, and `~`. Spaces are encoded as `%20`.
  * @esql_function scalar
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function URL_ENCODE_COMPONENT(string: keyword | text): keyword

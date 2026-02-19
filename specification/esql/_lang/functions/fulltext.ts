@@ -41,8 +41,8 @@ export class KQLOptions {
 /**
  * Performs a KQL query. Returns true if the provided KQL query string matches the row.
  * @esql_function scalar
- * @availability stack since=9.1.0
- * @availability serverless
+ * @availability stack since=9.1.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function KQL(
   query: keyword | text,
@@ -84,8 +84,8 @@ export class MATCHOptions {
 /**
  * Use `MATCH` to perform a match query on the specified field.
  * @esql_function scalar
- * @availability stack since=9.1.0
- * @availability serverless
+ * @availability stack since=9.1.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function MATCH(
   field: keyword | text | boolean | date | date_nanos | double | integer | ip | long | unsigned_long | version,
@@ -97,8 +97,8 @@ export function MATCH(
 /**
  * Use the match operator (`:`) to perform a match query on the specified field.
  * @esql_function scalar
- * @availability stack since=9.1.0
- * @availability serverless
+ * @availability stack since=9.1.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function MATCH_OPERATOR(
   field: keyword | text | boolean | date | date_nanos | double | integer | ip | long | unsigned_long | version,
@@ -123,8 +123,8 @@ export class MATCH_PHRASEOptions {
 /**
  * Use `MATCH_PHRASE` to perform a `match_phrase` on the
  * @esql_function scalar
- * @availability stack since=9.1.0
- * @availability serverless
+ * @availability stack since=9.1.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function MATCH_PHRASE(
   field: keyword | text,
@@ -230,8 +230,8 @@ export class QSTROptions {
 /**
  * Performs a query string query. Returns true if the provided query string matches the row.
  * @esql_function scalar
- * @availability stack since=9.1.0
- * @availability serverless
+ * @availability stack since=9.1.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function QSTR(
   query: keyword | text,
@@ -242,8 +242,8 @@ export function QSTR(
 /**
  * Scores an expression. Only full text functions will be scored. Returns scores for all the resulting docs.
  * @esql_function scalar
- * @availability stack since=9.3.0
- * @availability serverless
+ * @availability stack since=9.3.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function SCORE(query: boolean): double

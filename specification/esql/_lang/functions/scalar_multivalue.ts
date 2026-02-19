@@ -48,8 +48,8 @@ export function MV_CONCAT(string: text | keyword, delim: text | keyword): keywor
 /**
  * Checks if all values yielded by the second multivalue expression are present in the values yielded by the first multivalue expression. Returns a boolean. Null values are treated as an empty set.
  * @esql_function scalar
- * @availability stack since=9.2.0
- * @availability serverless
+ * @availability stack since=9.2.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function MV_CONTAINS(
@@ -84,8 +84,8 @@ export function MV_FIRST(
 /**
  * Returns the values that appear in both input fields. Returns `null` if either field is null or if no values match.
  * @esql_function scalar
- * @availability stack since=9.3.0
- * @availability serverless
+ * @availability stack since=9.3.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function MV_INTERSECTION(
@@ -96,8 +96,8 @@ export function MV_INTERSECTION(
 /**
  * Checks if any value yielded by the second multivalue expression is present in the values yielded by the first multivalue expression. Returns a boolean. Null values are treated as an empty set.
  * @esql_function scalar
- * @availability stack since=9.3.0
- * @availability serverless
+ * @availability stack since=9.3.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function MV_INTERSECTS(
@@ -186,8 +186,8 @@ export function MV_SUM(number: double | integer | long | unsigned_long): double 
 /**
  * Returns all unique values from the combined input fields (set union). Null values are treated as empty sets; returns `null` only if both fields are null.
  * @esql_function scalar
- * @availability stack since=9.4.0
- * @availability serverless
+ * @availability stack since=9.4.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function MV_UNION(

@@ -23,7 +23,7 @@ import { dense_vector, keyword } from '@esql/_lang/data_types'
 /**
  * Generates dense vector embeddings from text input using a specified inference endpoint. Use this function to generate query vectors for KNN searches against your vectorized data or others dense vector based operations.
  * @esql_function scalar
- * @availability stack since=9.4.0
- * @availability serverless
+ * @availability stack since=9.4.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function TEXT_EMBEDDING(text: keyword, inferencefunction.inference_id_parameter_name: keyword): dense_vector

@@ -26,8 +26,8 @@ import {
 /**
  * Limits (or clamps) the values of all samples to have a lower limit of min and an upper limit of max.
  * @esql_function scalar
- * @availability stack since=9.3.0
- * @availability serverless
+ * @availability stack since=9.3.0 stability=experimental
+ * @availability serverless stability=experimental
  * @esql_preview
  */
 export function CLAMP(
