@@ -66,7 +66,7 @@ const esqlSrc = path.join(esqlPlugin, 'src', 'main', 'java')
 
 interface MapParamEntry {
   name: string
-  type: string
+  types: string[]
   valueHint: string[]
   description: string
 }
@@ -85,6 +85,11 @@ interface FunctionParam {
   optional: boolean
 }
 
+interface AvailabilityEntry {
+  lifecycle: string
+  version: string
+}
+
 interface FunctionDef {
   name: string
   kind: string
@@ -95,6 +100,10 @@ interface FunctionDef {
   aliases: string[]
   preview: boolean
   since?: string
+  availability: AvailabilityEntry[]
+  sourceSubdir: string
+  /** Raw Java class name (uppercase), used for registry lookups */
+  javaClassName: string
 }
 
 // ---------------------------------------------------------------------------
@@ -238,17 +247,56 @@ function resolveBool (node: SyntaxNode): boolean {
   return node.type === 'true'
 }
 
+/** Resolve a param/entry name: string literals are unquoted; bare identifiers (Java constants) are lowercased. */
+function resolveParamName (node: SyntaxNode): string {
+  if (node.type === 'string_literal') return resolveString(node)
+  return node.text.toLowerCase()
+}
+
+/** Strip Asciidoc markup, doc-system placeholders, and stray whitespace from Java descriptions. */
+function sanitizeDescription (text: string): string {
+  return text
+    // {wikipedia}/Page_Name[display text] -> display text (https://en.wikipedia.org/wiki/Page_Name)
+    .replace(/\{wikipedia\}\/([^\[]+)\[([^\]]+)\]/g, '$2 (https://en.wikipedia.org/wiki/$1)')
+    // {attr}/path[display text] for any other attribute -> display text
+    .replace(/\{[a-zA-Z_-]+\}\/[^\[]*\[([^\]]+)\]/g, '$1')
+    // <<anchor,display text>> -> display text
+    .replace(/<<[^,>]+,([^>]+)>>/g, '$1')
+    // <<anchor>> -> anchor with hyphens as spaces
+    .replace(/<<([^>]+)>>/g, (_, anchor: string) => anchor.replace(/-/g, ' '))
+    // [text](docs-content://...) or [text](/reference/...) -> text
+    .replace(/\[([^\]]+)\]\((docs-content:\/\/|\/reference\/)[^)]*\)/g, '$1')
+    // literal \n -> space
+    .replace(/\\n/g, ' ')
+    // collapse multiple whitespace
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+/** Convert PascalCase class name to UPPER_SNAKE_CASE: HistogramPercentile -> HISTOGRAM_PERCENTILE */
+function camelToUpperSnake (name: string): string {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+    .toUpperCase()
+}
+
 // ---------------------------------------------------------------------------
 // Extract @FunctionInfo from a parsed Java file
 // ---------------------------------------------------------------------------
 
-function extractFunctionDefs (tree: Parser.Tree, filePath: string): FunctionDef[] {
+function extractFunctionDefs (tree: Parser.Tree, filePath: string, functionDir: string): FunctionDef[] {
   const results: FunctionDef[] = []
   const root = tree.rootNode
 
   const classNode = findAll(root, 'class_declaration')[0]
   const classIdent = classNode?.children.find(c => c.type === 'type_identifier')
   const className = classIdent?.text ?? path.basename(filePath, '.java')
+
+  const rel = path.relative(functionDir, filePath)
+  const parts = rel.split(path.sep)
+  parts.pop()
+  const sourceSubdir = parts.join('/')
 
   const constructors = findAll(root, 'constructor_declaration')
   for (const ctor of constructors) {
@@ -262,10 +310,29 @@ function extractFunctionDefs (tree: Parser.Tree, filePath: string): FunctionDef[
     const pairs = getAnnotationPairs(funcInfoAnn)
 
     const returnTypes = pairs.has('returnType') ? resolveStringArray(pairs.get('returnType')!) : []
-    const description = pairs.has('description') ? resolveString(pairs.get('description')!) : ''
+    const description = pairs.has('description') ? sanitizeDescription(resolveString(pairs.get('description')!)) : ''
     const kind = pairs.has('type') ? resolveEnum(pairs.get('type')!).toLowerCase() : 'scalar'
     const preview = pairs.has('preview') ? resolveBool(pairs.get('preview')!) : false
     const since = pairs.has('since') ? resolveString(pairs.get('since')!) || undefined : undefined
+
+    const availability: AvailabilityEntry[] = []
+    const appliesToNode = pairs.get('appliesTo')
+    if (appliesToNode != null) {
+      const ftaAnns = findAll(appliesToNode, 'annotation').filter(a =>
+        getAnnotationName(a) === 'FunctionAppliesTo'
+      )
+      for (const fta of ftaAnns) {
+        const ftaPairs = getAnnotationPairs(fta)
+        const lcNode = ftaPairs.get('lifeCycle')
+        const verNode = ftaPairs.get('version')
+        if (lcNode != null) {
+          availability.push({
+            lifecycle: resolveEnum(lcNode).toUpperCase(),
+            version: verNode != null ? resolveString(verNode) : ''
+          })
+        }
+      }
+    }
 
     const formalParams = findAll(ctor, 'formal_parameter')
     const params: FunctionParam[] = []
@@ -289,7 +356,7 @@ function extractFunctionDefs (tree: Parser.Tree, filePath: string): FunctionDef[
     }
 
     results.push({
-      name: className.toUpperCase(),
+      name: camelToUpperSnake(className),
       kind,
       description,
       params,
@@ -297,7 +364,10 @@ function extractFunctionDefs (tree: Parser.Tree, filePath: string): FunctionDef[
       returnTypes,
       aliases: [],
       preview,
-      since
+      since,
+      availability,
+      sourceSubdir,
+      javaClassName: className.toUpperCase()
     })
   }
 
@@ -311,11 +381,12 @@ function extractFunctionDefs (tree: Parser.Tree, filePath: string): FunctionDef[
 function extractParam (ann: SyntaxNode): FunctionParam | null {
   const pairs = getAnnotationPairs(ann)
 
-  const name = pairs.has('name') ? resolveString(pairs.get('name')!) : ''
+  const nameNode = pairs.get('name')
+  const name = nameNode != null ? resolveParamName(nameNode) : ''
   if (!name) return null
 
   const types = pairs.has('type') ? resolveStringArray(pairs.get('type')!) : []
-  const description = pairs.has('description') ? resolveString(pairs.get('description')!) : ''
+  const description = pairs.has('description') ? sanitizeDescription(resolveString(pairs.get('description')!)) : ''
   const optional = pairs.has('optional') ? resolveBool(pairs.get('optional')!) : false
 
   return { name, types, description, optional }
@@ -328,8 +399,9 @@ function extractParam (ann: SyntaxNode): FunctionParam | null {
 function extractMapParam (ann: SyntaxNode): MapParamDef | null {
   const pairs = getAnnotationPairs(ann)
 
-  const name = pairs.has('name') ? resolveString(pairs.get('name')!) : ''
-  const description = pairs.has('description') ? resolveString(pairs.get('description')!) : ''
+  const nameNode = pairs.get('name')
+  const name = nameNode != null ? resolveParamName(nameNode) : ''
+  const description = pairs.has('description') ? sanitizeDescription(resolveString(pairs.get('description')!)) : ''
   const optional = pairs.has('optional') ? resolveBool(pairs.get('optional')!) : false
 
   const entries: MapParamEntry[] = []
@@ -341,14 +413,15 @@ function extractMapParam (ann: SyntaxNode): MapParamDef | null {
     )
     for (const entryAnn of entryAnnotations) {
       const ep = getAnnotationPairs(entryAnn)
-      const eName = ep.has('name') ? resolveString(ep.get('name')!) : ''
+      const eNameNode = ep.get('name')
+      const eName = eNameNode != null ? resolveParamName(eNameNode) : ''
       if (!eName) continue
 
-      const eType = ep.has('type') ? resolveString(ep.get('type')!) : ''
+      const eTypes = ep.has('type') ? resolveStringArray(ep.get('type')!) : []
       const eValueHint = ep.has('valueHint') ? resolveStringArray(ep.get('valueHint')!) : []
-      const eDesc = ep.has('description') ? resolveString(ep.get('description')!) : ''
+      const eDesc = ep.has('description') ? sanitizeDescription(resolveString(ep.get('description')!)) : ''
 
-      entries.push({ name: eName, type: eType, valueHint: eValueHint, description: eDesc })
+      entries.push({ name: eName, types: eTypes, valueHint: eValueHint, description: eDesc })
     }
   }
 
@@ -391,6 +464,212 @@ function parseRegistry (registryPath: string): Map<string, RegistryEntry> {
 }
 
 // ---------------------------------------------------------------------------
+// Java subdir -> TypeScript filename mapping
+// ---------------------------------------------------------------------------
+
+function subdirToTsFile (subdir: string): string {
+  if (subdir === '') return 'scalar_misc'
+  if (subdir === 'scalar') return 'scalar_misc'
+  if (subdir.startsWith('scalar/')) {
+    const rest = subdir.slice(7)
+    // Merge deeper nesting into the parent: scalar/string/regex -> scalar_string
+    const topLevel = rest.split('/')[0]
+    return 'scalar_' + topLevel
+  }
+  return subdir.replace(/\//g, '_')
+}
+
+// Types that are built-in to TypeScript and should not be declared in or imported from data_types.ts
+const TS_BUILTIN_TYPES = new Set(['boolean', 'string', 'object'])
+
+// ---------------------------------------------------------------------------
+// Collect all types used by a set of functions
+// ---------------------------------------------------------------------------
+
+function collectUsedTypes (funcs: FunctionDef[]): Set<string> {
+  const types = new Set<string>()
+  for (const f of funcs) {
+    for (const t of f.returnTypes) types.add(t)
+    for (const p of f.params) {
+      for (const t of p.types) types.add(t)
+    }
+    for (const mp of f.mapParams) {
+      for (const e of mp.entries) {
+        for (const t of e.types) types.add(t)
+      }
+    }
+  }
+  return types
+}
+
+// ---------------------------------------------------------------------------
+// Sync missing types to data_types.ts
+// ---------------------------------------------------------------------------
+
+function syncDataTypes (allTypes: Set<string>, dataTypesPath: string): string[] {
+  let content = readFile(dataTypesPath)
+  const existing = new Set<string>()
+  const re = /^export type (\w+)\s*=/gm
+  let m: RegExpExecArray | null
+  while ((m = re.exec(content)) !== null) {
+    existing.add(m[1])
+  }
+
+  const added: string[] = []
+  const sorted = [...allTypes].sort()
+  for (const t of sorted) {
+    if (!existing.has(t) && !TS_BUILTIN_TYPES.has(t)) {
+      content += `\n/**\n * @esql_data_type\n */\nexport type ${t} = '${t}'\n`
+      added.push(t)
+    }
+  }
+
+  if (added.length > 0) {
+    fs.writeFileSync(dataTypesPath, content)
+  }
+  return added
+}
+
+// ---------------------------------------------------------------------------
+// TypeScript file generation
+// ---------------------------------------------------------------------------
+
+const LICENSE_HEADER = `// @ts-nocheck \u2014 body-less function declarations are intentional (TS2391)
+/*
+ * Licensed to Elasticsearch B.V. under one or more contributor
+ * license agreements. See the NOTICE file distributed with
+ * this work for additional information regarding copyright
+ * ownership. Elasticsearch B.V. licenses this file to you under
+ * the Apache License, Version 2.0 (the "License"); you may
+ * not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */`
+
+function generateTsFile (funcs: FunctionDef[]): string {
+  const sorted = [...funcs].sort((a, b) => a.name.localeCompare(b.name))
+
+  const usedTypes = collectUsedTypes(sorted)
+  const importList = [...usedTypes].filter(t => !TS_BUILTIN_TYPES.has(t)).sort()
+
+  const lines: string[] = [LICENSE_HEADER, '']
+
+  if (importList.length > 0) {
+    if (importList.length <= 4) {
+      lines.push(`import { ${importList.join(', ')} } from '@esql/_lang/data_types'`)
+    } else {
+      lines.push('import {')
+      for (let i = 0; i < importList.length; i += 6) {
+        const chunk = importList.slice(i, i + 6)
+        lines.push('  ' + chunk.join(', ') + (i + 6 < importList.length ? ',' : ''))
+      }
+      lines.push("} from '@esql/_lang/data_types'")
+    }
+  }
+
+  for (const func of sorted) {
+    lines.push('')
+
+    // Emit MapParam options class before the function
+    for (const mp of func.mapParams) {
+      const optClassName = func.name + 'Options'
+      lines.push('/**')
+      lines.push(` * Options for the ${func.name} function.`)
+      lines.push(' * @esql_map_param_type')
+      lines.push(' */')
+      lines.push(`export class ${optClassName} {`)
+      for (const entry of mp.entries) {
+        if (entry.description) {
+          lines.push(`  /** ${entry.description} */`)
+        }
+        const entryType = entry.types.length > 0 ? entry.types.join(' | ') : 'keyword'
+        lines.push(`  ${entry.name}${mp.optional || entry.name !== mp.entries[0]?.name ? '?' : ''}: ${entryType}`)
+      }
+      lines.push('}')
+      lines.push('')
+    }
+
+    // JSDoc block
+    const jsdocLines: string[] = []
+    if (func.description) {
+      const descLine = func.description.split('\n')[0].trim()
+      if (descLine) jsdocLines.push(descLine)
+    }
+    jsdocLines.push(`@esql_function ${func.kind}`)
+    for (const alias of func.aliases) {
+      jsdocLines.push(`@esql_alias ${alias}`)
+    }
+
+    const gaEntry = func.availability.find(a => a.lifecycle === 'GA')
+    const previewEntry = func.availability.find(a => a.lifecycle === 'PREVIEW')
+    if (gaEntry?.version) {
+      jsdocLines.push(`@availability stack since=${gaEntry.version}`)
+      jsdocLines.push('@availability serverless')
+    } else if (previewEntry?.version) {
+      jsdocLines.push(`@availability stack since=${previewEntry.version}`)
+      jsdocLines.push('@availability serverless')
+    }
+
+    if (func.preview || (func.availability.length > 0 && gaEntry == null)) {
+      jsdocLines.push('@esql_preview')
+    }
+
+    lines.push('/**')
+    for (const jl of jsdocLines) {
+      lines.push(` * ${jl}`)
+    }
+    lines.push(' */')
+
+    // Function declaration
+    const returnUnion = func.returnTypes.join(' | ') || 'void'
+    const paramStrs: string[] = []
+
+    for (const p of func.params) {
+      const typeUnion = p.types.join(' | ') || 'keyword'
+      paramStrs.push(`${p.name}${p.optional ? '?' : ''}: ${typeUnion}`)
+    }
+
+    for (const mp of func.mapParams) {
+      const optClassName = func.name + 'Options'
+      paramStrs.push(`/** @esql_map_param */\n  ${mp.name}${mp.optional ? '?' : ''}: ${optClassName}`)
+    }
+
+    if (paramStrs.length === 0) {
+      lines.push(`export function ${func.name}(): ${returnUnion}`)
+    } else if (paramStrs.length <= 2 && !func.mapParams.length) {
+      const inline = paramStrs.join(', ')
+      const sig = `export function ${func.name}(${inline}): ${returnUnion}`
+      if (sig.length <= 120) {
+        lines.push(sig)
+      } else {
+        lines.push(`export function ${func.name}(`)
+        for (let i = 0; i < paramStrs.length; i++) {
+          lines.push(`  ${paramStrs[i]}${i < paramStrs.length - 1 ? ',' : ''}`)
+        }
+        lines.push(`): ${returnUnion}`)
+      }
+    } else {
+      lines.push(`export function ${func.name}(`)
+      for (let i = 0; i < paramStrs.length; i++) {
+        lines.push(`  ${paramStrs[i]}${i < paramStrs.length - 1 ? ',' : ''}`)
+      }
+      lines.push(`): ${returnUnion}`)
+    }
+  }
+
+  lines.push('')
+  return lines.join('\n')
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -408,7 +687,7 @@ function main (): void {
     const content = readFile(file)
     if (content.includes('@FunctionInfo')) {
       const tree = tsParser.parse(content)
-      const defs = extractFunctionDefs(tree, file)
+      const defs = extractFunctionDefs(tree, file, functionDir)
       allFunctions.push(...defs)
     }
   }
@@ -417,7 +696,7 @@ function main (): void {
   for (const file of registryFiles) {
     const registry = parseRegistry(file)
     for (const func of allFunctions) {
-      const entry = registry.get(func.name)
+      const entry = registry.get(func.javaClassName)
       if (entry != null) {
         func.name = entry.canonicalName
         func.aliases = entry.aliases
@@ -438,29 +717,39 @@ function main (): void {
     console.log(`  ${kind}: ${funcs.length}`)
   }
 
-  const withMapParams = allFunctions.filter(f => f.mapParams.length > 0)
-  if (withMapParams.length > 0) {
-    console.log(`  (${withMapParams.length} with map params)`)
+  // Group functions by target TS file
+  const byFile = new Map<string, FunctionDef[]>()
+  for (const func of allFunctions) {
+    const tsFile = subdirToTsFile(func.sourceSubdir)
+    if (!byFile.has(tsFile)) byFile.set(tsFile, [])
+    byFile.get(tsFile)!.push(func)
   }
 
-  const withPreview = allFunctions.filter(f => f.preview)
-  if (withPreview.length > 0) {
-    console.log(`  (${withPreview.length} marked preview)`)
+  // Sync missing data types
+  const allTypes = collectUsedTypes(allFunctions)
+  const dataTypesPath = path.join(outDir, 'data_types.ts')
+  const addedTypes = syncDataTypes(allTypes, dataTypesPath)
+  if (addedTypes.length > 0) {
+    console.log(`\nAdded ${addedTypes.length} new data types to data_types.ts:`)
+    for (const t of addedTypes) {
+      console.log(`  ${t}`)
+    }
   }
 
-  const reportPath = path.join(outDir, '..', 'extraction-report.json')
-  fs.mkdirSync(path.dirname(reportPath), { recursive: true })
-  fs.writeFileSync(reportPath, JSON.stringify({
-    extractedAt: new Date().toISOString(),
-    elasticsearchPath: esPath,
-    totalFunctions: allFunctions.length,
-    functions: allFunctions.sort((a, b) => a.name.localeCompare(b.name))
-  }, null, 2))
+  // Generate TS files
+  const functionsDir = path.join(outDir, 'functions')
+  fs.mkdirSync(functionsDir, { recursive: true })
 
-  console.log(`\nWrote extraction report to: ${reportPath}`)
-  console.log('\nReview the report and manually update the TypeScript specification files.')
-  console.log('The TypeScript files under specification/esql/_lang/ are the source of truth')
-  console.log('for the schema.json output -- the extraction is a maintenance aid, not a generator.')
+  console.log(`\nGenerating TypeScript files:`)
+  const sortedFiles = [...byFile.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  for (const [tsFile, funcs] of sortedFiles) {
+    const content = generateTsFile(funcs)
+    const filePath = path.join(functionsDir, `${tsFile}.ts`)
+    fs.writeFileSync(filePath, content)
+    console.log(`  ${tsFile}.ts: ${funcs.length} functions`)
+  }
+
+  console.log(`\nDone. Generated ${sortedFiles.length} files with ${allFunctions.length} functions.`)
 }
 
 main()
