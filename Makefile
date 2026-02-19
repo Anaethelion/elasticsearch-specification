@@ -64,6 +64,9 @@ transform-to-openapi-for-docs: ## Generate the OpenAPI definition tailored for A
 filter-for-serverless: ## Generate the serverless version from the compiled schema
 	@npm run --prefix compiler filter-by-availability -- --serverless --visibility=public --input ../output/schema/schema.json --output ../output/output/openapi/elasticsearch-serverless-openapi.json
 
+extract-esql-lang: ## Extract ES|QL metadata from an Elasticsearch checkout (usage: make extract-esql-lang es=/path/to/elasticsearch)
+	@npm run extract-esql-lang --prefix compiler -- --es-path $(es)
+
 dump-routes: ## Create a new schema with all generics expanded
 	@npm run dump-routes --prefix compiler
 
