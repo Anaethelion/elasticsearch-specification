@@ -32,14 +32,6 @@
  * @esql_source_capable
  * @esql_result_capable
  */
-// @ts-expect-error TS2457 — intentionally shadows the built-in 'boolean' to model the ES|QL type
-export type boolean = 'boolean'
-
-/**
- * @esql_data_type
- * @esql_source_capable
- * @esql_result_capable
- */
 export type cartesian_point = 'cartesian_point'
 
 /**
