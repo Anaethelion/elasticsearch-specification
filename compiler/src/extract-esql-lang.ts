@@ -22,6 +22,8 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
+import Parser from 'tree-sitter'
+import Java from 'tree-sitter-java'
 
 // ---------------------------------------------------------------------------
 // CLI arg parsing
@@ -44,8 +46,15 @@ if (!esPath) {
   process.exit(1)
 }
 
+// npm sets cwd to the package directory; resolve relative paths against the
+// original working directory so that `make extract-esql-lang es=../elasticsearch` works.
+const invocationCwd = process.env.INIT_CWD ?? process.cwd()
+esPath = path.resolve(invocationCwd, esPath)
+
 if (!outDir) {
   outDir = path.join(__dirname, '..', '..', 'specification', 'esql', '_lang')
+} else {
+  outDir = path.resolve(invocationCwd, outDir)
 }
 
 const esqlPlugin = path.join(esPath, 'x-pack', 'plugin', 'esql')
@@ -54,6 +63,20 @@ const esqlSrc = path.join(esqlPlugin, 'src', 'main', 'java')
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+interface MapParamEntry {
+  name: string
+  type: string
+  valueHint: string[]
+  description: string
+}
+
+interface MapParamDef {
+  name: string
+  description: string
+  entries: MapParamEntry[]
+  optional: boolean
+}
 
 interface FunctionParam {
   name: string
@@ -67,6 +90,7 @@ interface FunctionDef {
   kind: string
   description: string
   params: FunctionParam[]
+  mapParams: MapParamDef[]
   returnTypes: string[]
   aliases: string[]
   preview: boolean
@@ -74,7 +98,16 @@ interface FunctionDef {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// tree-sitter parser (initialised once)
+// ---------------------------------------------------------------------------
+
+const tsParser = new Parser()
+tsParser.setLanguage(Java)
+
+type SyntaxNode = Parser.SyntaxNode
+
+// ---------------------------------------------------------------------------
+// File-system helpers
 // ---------------------------------------------------------------------------
 
 function findFiles (dir: string, pattern: RegExp): string[] {
@@ -98,69 +131,170 @@ function readFile (filePath: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Parse @FunctionInfo annotations
+// AST helpers
 // ---------------------------------------------------------------------------
 
-function parseFunctionInfo (content: string, filePath: string): FunctionDef[] {
+function findAll (node: SyntaxNode, type: string): SyntaxNode[] {
+  const results: SyntaxNode[] = []
+  if (node.type === type) results.push(node)
+  for (let i = 0; i < node.childCount; i++) {
+    results.push(...findAll(node.child(i)!, type))
+  }
+  return results
+}
+
+function getAnnotationName (ann: SyntaxNode): string {
+  const nameNode = ann.childForFieldName('name')
+  return nameNode?.text ?? ''
+}
+
+/** Return a Map of attribute-name to value-node for direct element_value_pair children. */
+function getAnnotationPairs (ann: SyntaxNode): Map<string, SyntaxNode> {
+  const pairs = new Map<string, SyntaxNode>()
+  const argList = ann.children.find(c => c.type === 'annotation_argument_list')
+  if (argList == null) return pairs
+
+  for (let i = 0; i < argList.childCount; i++) {
+    const child = argList.child(i)!
+    if (child.type === 'element_value_pair') {
+      const key = child.childForFieldName('key')?.text
+      const value = child.childForFieldName('value')
+      if (key != null && value != null) {
+        pairs.set(key, value)
+      }
+    }
+  }
+  return pairs
+}
+
+/** Resolve a string value node, handling string_literal, text blocks, and binary_expression (+concat). */
+function resolveString (node: SyntaxNode): string {
+  if (node.type === 'string_literal') {
+    const text = node.text
+    // Text block: """..."""
+    if (text.startsWith('"""')) {
+      return resolveTextBlock(text)
+    }
+    // Regular string: strip surrounding quotes
+    return text.slice(1, -1)
+  }
+
+  if (node.type === 'binary_expression') {
+    const parts: string[] = []
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i)!
+      if (child.type === 'string_literal' || child.type === 'binary_expression') {
+        parts.push(resolveString(child))
+      }
+    }
+    return parts.join('')
+  }
+
+  return node.text
+}
+
+function resolveTextBlock (raw: string): string {
+  const inner = raw.slice(3, -3)
+  const lines = inner.split('\n')
+  if (lines.length > 0 && lines[0].trim() === '') lines.shift()
+  const indents = lines.filter(l => l.trim().length > 0).map(l => l.match(/^(\s*)/)![1].length)
+  const minIndent = indents.length > 0 ? Math.min(...indents) : 0
+  return lines.map(l => l.slice(minIndent)).join('\n').trim()
+}
+
+/** Resolve an array value: `{ "a", "b" }` or a single `"value"`. */
+function resolveStringArray (node: SyntaxNode): string[] {
+  if (node.type === 'element_value_array_initializer') {
+    const results: string[] = []
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i)!
+      if (child.type === 'string_literal' || child.type === 'binary_expression') {
+        results.push(resolveString(child))
+      }
+    }
+    return results
+  }
+
+  if (node.type === 'string_literal' || node.type === 'binary_expression') {
+    return [resolveString(node)]
+  }
+
+  return []
+}
+
+/** Resolve an enum constant (`FunctionType.AGGREGATE`) or quoted string. */
+function resolveEnum (node: SyntaxNode): string {
+  if (node.type === 'field_access') {
+    const ids = findAll(node, 'identifier')
+    return ids.length > 0 ? ids[ids.length - 1].text : node.text
+  }
+  if (node.type === 'string_literal') {
+    return resolveString(node)
+  }
+  return node.text
+}
+
+function resolveBool (node: SyntaxNode): boolean {
+  return node.type === 'true'
+}
+
+// ---------------------------------------------------------------------------
+// Extract @FunctionInfo from a parsed Java file
+// ---------------------------------------------------------------------------
+
+function extractFunctionDefs (tree: Parser.Tree, filePath: string): FunctionDef[] {
   const results: FunctionDef[] = []
+  const root = tree.rootNode
 
-  const funcInfoRegex = /@FunctionInfo\s*\(([\s\S]*?)\)/g
-  let match: RegExpExecArray | null
+  const classNode = findAll(root, 'class_declaration')[0]
+  const classIdent = classNode?.children.find(c => c.type === 'type_identifier')
+  const className = classIdent?.text ?? path.basename(filePath, '.java')
 
-  while ((match = funcInfoRegex.exec(content)) !== null) {
-    const block = match[1]
+  const constructors = findAll(root, 'constructor_declaration')
+  for (const ctor of constructors) {
+    const mods = ctor.children.find(c => c.type === 'modifiers')
+    if (mods == null) continue
 
-    const getAttr = (name: string): string => {
-      const attrMatch = block.match(new RegExp(`${name}\\s*=\\s*"([^"]*)"`, 's'))
-      return attrMatch ? attrMatch[1] : ''
-    }
+    const annotations = findAll(mods, 'annotation')
+    const funcInfoAnn = annotations.find(a => getAnnotationName(a) === 'FunctionInfo')
+    if (funcInfoAnn == null) continue
 
-    const getBoolAttr = (name: string): boolean => {
-      const attrMatch = block.match(new RegExp(`${name}\\s*=\\s*(true|false)`))
-      return attrMatch ? attrMatch[1] === 'true' : false
-    }
+    const pairs = getAnnotationPairs(funcInfoAnn)
 
-    const returnType = getAttr('returnType')
-    const description = getAttr('description')
-    const kind = getAttr('type') || 'SCALAR'
-    const preview = getBoolAttr('preview')
-    const since = getAttr('since')
+    const returnTypes = pairs.has('returnType') ? resolveStringArray(pairs.get('returnType')!) : []
+    const description = pairs.has('description') ? resolveString(pairs.get('description')!) : ''
+    const kind = pairs.has('type') ? resolveEnum(pairs.get('type')!).toLowerCase() : 'scalar'
+    const preview = pairs.has('preview') ? resolveBool(pairs.get('preview')!) : false
+    const since = pairs.has('since') ? resolveString(pairs.get('since')!) || undefined : undefined
 
-    const classMatch = content.match(/public\s+class\s+(\w+)/)
-    const className = classMatch ? classMatch[1] : path.basename(filePath, '.java')
-
-    const paramRegex = /@Param\s*\(([\s\S]*?)\)/g
+    const formalParams = findAll(ctor, 'formal_parameter')
     const params: FunctionParam[] = []
-    let paramMatch: RegExpExecArray | null
+    const mapParams: MapParamDef[] = []
 
-    const searchStart = Math.max(0, match.index - 200)
-    const searchEnd = Math.min(content.length, match.index + match[0].length + 2000)
-    const methodBlock = content.slice(searchStart, searchEnd)
+    for (const fp of formalParams) {
+      const fpMods = fp.children.find(c => c.type === 'modifiers')
+      if (fpMods == null) continue
 
-    const methodParamRegex = /@Param\s*\(([\s\S]*?)\)/g
-    while ((paramMatch = methodParamRegex.exec(methodBlock)) !== null) {
-      const paramBlock = paramMatch[1]
-      const paramName = paramBlock.match(/name\s*=\s*"([^"]*)"/)
-      const paramType = paramBlock.match(/type\s*=\s*"([^"]*)"/)
-      const paramDesc = paramBlock.match(/description\s*=\s*"([^"]*)"/)
-      const paramOptional = paramBlock.match(/optional\s*=\s*(true|false)/)
-
-      if (paramName) {
-        params.push({
-          name: paramName[1],
-          types: paramType ? paramType[1].split('|').map(t => t.trim()) : [],
-          description: paramDesc ? paramDesc[1] : '',
-          optional: paramOptional ? paramOptional[1] === 'true' : false
-        })
+      const fpAnnotations = findAll(fpMods, 'annotation')
+      for (const ann of fpAnnotations) {
+        const name = getAnnotationName(ann)
+        if (name === 'Param') {
+          const p = extractParam(ann)
+          if (p != null) params.push(p)
+        } else if (name === 'MapParam') {
+          const mp = extractMapParam(ann)
+          if (mp != null) mapParams.push(mp)
+        }
       }
     }
 
     results.push({
       name: className.toUpperCase(),
-      kind: kind.toLowerCase(),
+      kind,
       description,
       params,
-      returnTypes: returnType ? returnType.split('|').map(t => t.trim()) : [],
+      mapParams,
+      returnTypes,
       aliases: [],
       preview,
       since
@@ -171,27 +305,89 @@ function parseFunctionInfo (content: string, filePath: string): FunctionDef[] {
 }
 
 // ---------------------------------------------------------------------------
-// Parse function registry for aliases
+// Extract @Param
 // ---------------------------------------------------------------------------
 
-function parseRegistry (registryPath: string): Map<string, string[]> {
-  const aliases = new Map<string, string[]>()
-  if (!fs.existsSync(registryPath)) return aliases
+function extractParam (ann: SyntaxNode): FunctionParam | null {
+  const pairs = getAnnotationPairs(ann)
 
-  const content = readFile(registryPath)
+  const name = pairs.has('name') ? resolveString(pairs.get('name')!) : ''
+  if (!name) return null
 
-  const aliasRegex = /def\s*\(\s*(\w+)\.class\s*,\s*((?:"[^"]*"\s*,?\s*)+)\)/g
-  let match: RegExpExecArray | null
+  const types = pairs.has('type') ? resolveStringArray(pairs.get('type')!) : []
+  const description = pairs.has('description') ? resolveString(pairs.get('description')!) : ''
+  const optional = pairs.has('optional') ? resolveBool(pairs.get('optional')!) : false
 
-  while ((match = aliasRegex.exec(content)) !== null) {
-    const className = match[1]
-    const names = match[2].match(/"([^"]*)"/g)?.map(n => n.slice(1, -1).toUpperCase()) ?? []
-    if (names.length > 1) {
-      aliases.set(names[0], names.slice(1))
+  return { name, types, description, optional }
+}
+
+// ---------------------------------------------------------------------------
+// Extract @MapParam
+// ---------------------------------------------------------------------------
+
+function extractMapParam (ann: SyntaxNode): MapParamDef | null {
+  const pairs = getAnnotationPairs(ann)
+
+  const name = pairs.has('name') ? resolveString(pairs.get('name')!) : ''
+  const description = pairs.has('description') ? resolveString(pairs.get('description')!) : ''
+  const optional = pairs.has('optional') ? resolveBool(pairs.get('optional')!) : false
+
+  const entries: MapParamEntry[] = []
+
+  const paramsNode = pairs.get('params')
+  if (paramsNode != null) {
+    const entryAnnotations = findAll(paramsNode, 'annotation').filter(a =>
+      getAnnotationName(a).includes('MapParamEntry')
+    )
+    for (const entryAnn of entryAnnotations) {
+      const ep = getAnnotationPairs(entryAnn)
+      const eName = ep.has('name') ? resolveString(ep.get('name')!) : ''
+      if (!eName) continue
+
+      const eType = ep.has('type') ? resolveString(ep.get('type')!) : ''
+      const eValueHint = ep.has('valueHint') ? resolveStringArray(ep.get('valueHint')!) : []
+      const eDesc = ep.has('description') ? resolveString(ep.get('description')!) : ''
+
+      entries.push({ name: eName, type: eType, valueHint: eValueHint, description: eDesc })
     }
   }
 
-  return aliases
+  return { name, description, entries, optional }
+}
+
+// ---------------------------------------------------------------------------
+// Parse function registry for aliases
+// ---------------------------------------------------------------------------
+
+interface RegistryEntry {
+  /** Canonical ES|QL function name (uppercased) from the registry's first string arg */
+  canonicalName: string
+  /** Additional names (uppercased) */
+  aliases: string[]
+}
+
+function parseRegistry (registryPath: string): Map<string, RegistryEntry> {
+  const entries = new Map<string, RegistryEntry>()
+  if (!fs.existsSync(registryPath)) return entries
+
+  const content = readFile(registryPath)
+
+  // Match: def(ClassName.class, <optional constructor ref>, "name1", "name2", ...)
+  const defRegex = /def\s*\(\s*(\w+)\.class\s*,[^"]*?((?:"[^"]*"\s*,?\s*)+)\)/g
+  let match: RegExpExecArray | null
+
+  while ((match = defRegex.exec(content)) !== null) {
+    const className = match[1].toUpperCase()
+    const names = match[2].match(/"([^"]*)"/g)?.map(n => n.slice(1, -1).toUpperCase()) ?? []
+    if (names.length > 0) {
+      entries.set(className, {
+        canonicalName: names[0],
+        aliases: names.slice(1)
+      })
+    }
+  }
+
+  return entries
 }
 
 // ---------------------------------------------------------------------------
@@ -211,18 +407,20 @@ function main (): void {
   for (const file of javaFiles) {
     const content = readFile(file)
     if (content.includes('@FunctionInfo')) {
-      const defs = parseFunctionInfo(content, file)
+      const tree = tsParser.parse(content)
+      const defs = extractFunctionDefs(tree, file)
       allFunctions.push(...defs)
     }
   }
 
   const registryFiles = findFiles(esqlSrc, /EsqlFunctionRegistry\.java$/)
   for (const file of registryFiles) {
-    const aliases = parseRegistry(file)
+    const registry = parseRegistry(file)
     for (const func of allFunctions) {
-      const funcAliases = aliases.get(func.name)
-      if (funcAliases) {
-        func.aliases = funcAliases
+      const entry = registry.get(func.name)
+      if (entry != null) {
+        func.name = entry.canonicalName
+        func.aliases = entry.aliases
       }
     }
   }
@@ -236,8 +434,18 @@ function main (): void {
     byKind.get(kind)!.push(func)
   }
 
-  for (const [kind, funcs] of byKind) {
+  for (const [kind, funcs] of byKind.entries()) {
     console.log(`  ${kind}: ${funcs.length}`)
+  }
+
+  const withMapParams = allFunctions.filter(f => f.mapParams.length > 0)
+  if (withMapParams.length > 0) {
+    console.log(`  (${withMapParams.length} with map params)`)
+  }
+
+  const withPreview = allFunctions.filter(f => f.preview)
+  if (withPreview.length > 0) {
+    console.log(`  (${withPreview.length} marked preview)`)
   }
 
   const reportPath = path.join(outDir, '..', 'extraction-report.json')

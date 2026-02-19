@@ -43,7 +43,9 @@
     "semver": "^7.5.2",
     "ts-morph": "^26",
     "zx": "^8.8.5",
-    "minimist": "^1.2.6"
+    "minimist": "^1.2.6",
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-java": "^0.23.5"
   },
   "engines": {
     "node": ">=24"
