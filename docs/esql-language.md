@@ -8,7 +8,58 @@ autocomplete, and validate queries at compile/build time.
 The source of truth for the language lives in the Elasticsearch server
 (Java annotations such as `@FunctionInfo` / `@Param` and the ANTLR grammar files). The
 TypeScript specification files in this repository are a curated mirror of that information,
-and the [`tools/extract-esql-lang/`](#extraction-tool) script helps keep them in sync.
+and the [extraction tool](#extraction-tool) keeps them in sync automatically.
+
+## Query structure
+
+An ES|QL query is a pipeline: one source command followed by zero or more processing
+commands separated by `|`. The metamodel reflects this structure and tells clients what
+is valid at each position.
+
+```
+  source command          processing commands
+  (position=source)       (position=processing)
+       |                       |              |
+       v                       v              v
+    FROM index            | STATS ...    | SORT ...    | KEEP ...
+                               |
+                   +-----------+-----------+
+                   |                       |
+              main expression          BY clause
+                   |                       |
+                   v                       v
+           acceptedFunctionKinds   acceptedFunctionKinds
+           [scalar, aggregate,     [scalar, grouping]
+            time_series_aggregate]        |
+                   |                      |
+                   v                      v
+             AVG(salary)            BUCKET(hire_date, 1 year)
+             ^^^ aggregate          ^^^^^^ grouping
+                   |                      |
+                   v                      v
+              params/return          params/return
+              use EsqlDataType       use EsqlDataType
+```
+
+To build a query, a client walks this chain:
+
+1. **Pick a source command** -- filter `commands` where `position = source`
+2. **Chain processing commands** -- filter `commands` where `position = processing`
+3. **For each command's expressions** -- check `command.acceptedFunctionKinds` to know
+   which functions to offer (defaults to `[scalar]` when absent)
+4. **For each clause** -- check `clause.acceptedFunctionKinds` independently
+   (e.g. the BY clause in STATS accepts `grouping` functions like BUCKET)
+5. **For function parameters and return types** -- look up `EsqlDataType` to validate
+   type compatibility
+
+## Data flow
+
+The extraction tool reads two sources from an Elasticsearch checkout:
+1. **Java annotations** on function classes -- produces function files and data type declarations
+2. **ANTLR grammar** (`EsqlBaseParser.g4`) -- auto-syncs `commands.ts`, adding new commands,
+   removing stale ones, and patching `@esql_function_context` annotations
+
+The compiler then reads the TypeScript spec files and produces the `esql` section of `schema.json`.
 
 ## Directory layout
 
@@ -18,7 +69,7 @@ All ES|QL language definitions live under `specification/esql/_lang/`:
 specification/esql/_lang/
   _types.ts              Supporting type aliases for command clause shapes
   data_types.ts          ES|QL data type vocabulary
-  commands.ts            All commands (source and processing)
+  commands.ts            All commands (source and processing) -- auto-synced with grammar
   operators.ts           All operators (arithmetic, comparison, logical, etc.)
   functions/
     scalar_math.ts       Math functions (ABS, CEIL, FLOOR, ROUND, ...)
@@ -85,42 +136,77 @@ typed signatures. The type names themselves become the string values in `schema.
 
 Commands are modeled as annotated classes in `commands.ts`. The `@esql_command` tag takes
 a position argument: `source` (produces rows, e.g. `FROM`) or `processing` (transforms
-rows, e.g. `WHERE`, `STATS`).
+rows, e.g. `WHERE`, `STATS`). These values are defined by the `EsqlCommandPosition` enum
+in the metamodel.
 
 Class properties represent the command's arguments. The first non-clause property becomes
 the `mainArgument` in the schema. Properties annotated with `@esql_clause` become named
 clauses (e.g. the `BY` clause in `STATS`).
 
+### Function context annotations
+
+Commands and clauses can declare which function kinds are valid in their expression
+context using `@esql_function_context`. This is auto-managed by the extraction tool
+based on the ANTLR grammar (specifically, which commands use `aggFields` and `BY` clauses).
+
 Example:
 
 ```ts
 /**
- * Retrieves data from one or more data streams, indices, or aliases.
- * @esql_command source
+ * Groups rows by one or more expressions and computes aggregate values.
+ * @esql_command processing
+ * @esql_function_context aggregate
+ * @esql_function_context time_series_aggregate
  * @availability stack since=8.11.0
  * @availability serverless
  */
-export class FROM {
-  /** Index pattern(s) to read from. */
-  index: EsqlIndexPattern
+export class STATS {
+  /** Aggregate expressions to compute. */
+  aggregates?: EsqlAggFields
   /**
-   * Metadata fields to retrieve alongside document fields.
-   * @esql_clause METADATA
+   * Grouping expressions.
+   * @esql_clause BY
+   * @esql_function_context grouping
    */
-  metadata?: EsqlFieldList
+  by?: EsqlFieldList
 }
 ```
+
+This produces `acceptedFunctionKinds` in `schema.json`:
+
+```json
+{
+  "name": "STATS",
+  "position": "processing",
+  "acceptedFunctionKinds": ["scalar", "aggregate", "time_series_aggregate"],
+  "clauses": [
+    {
+      "keyword": "BY",
+      "acceptedFunctionKinds": ["scalar", "grouping"]
+    }
+  ]
+}
+```
+
+Clients use `acceptedFunctionKinds` for autocomplete: when a user is typing inside
+a STATS command, offer scalar, aggregate, and time-series aggregate functions; in the
+BY clause, offer scalar and grouping functions. Commands without `acceptedFunctionKinds`
+accept only scalar functions by default.
+
+### Command annotation reference
 
 | Tag | Purpose |
 |-----|---------|
 | `@esql_command source\|processing` | Declares a command and its position |
 | `@esql_clause <KEYWORD>` | Marks a property as a named clause |
+| `@esql_function_context <kind>` | Declares which function kinds are valid (auto-managed) |
 | `@esql_preview` | Marks the command as preview/experimental |
 
 ## Operators
 
 Operators are modeled as annotated classes in `operators.ts`. They are separate from
-functions because they have fixity and precedence.
+functions because they have fixity and precedence. Fixity values (`prefix`, `infix`,
+`postfix`) are defined by the `EsqlOperatorFixity` enum in the metamodel.
 
 Class properties named `lhs`, `rhs`, or `operand` become operator parameters.
 A property annotated with `@esql_return_type` defines the return type.
@@ -154,9 +240,12 @@ export class ADD {
 ## Functions
 
 Functions are modeled as **TypeScript function declarations without a body** in the
-`functions/` directory. Parameter and return types use collapsed union types: each union
-member is an ES|QL data type imported from `data_types.ts`. Client generators decide
-how to map these unions (overloads, generics, discriminated unions, etc.).
+`functions/` directory. The function kind (`scalar`, `aggregate`, `grouping`,
+`time_series_aggregate`) is declared via `@esql_function` and defined by the
+`EsqlFunctionKind` enum in the metamodel. Parameter and return types use collapsed
+union types: each union member is an ES|QL data type imported from `data_types.ts`.
+Client generators decide how to map these unions (overloads, generics, discriminated
+unions, etc.).
 
 ### Simple function
 
@@ -208,8 +297,8 @@ export class MATCHOptions {
 /**
  * Performs a match query on the specified field.
  * @esql_function scalar
- * @availability stack since=9.0.0
- * @availability serverless
+ * @availability stack since=9.0.0 stability=stable
+ * @availability serverless stability=stable
  */
 export function MATCH(
   field: keyword | text | boolean | date | date_nanos | double | integer | ip | long | unsigned_long | version,
@@ -238,14 +327,31 @@ specification:
 ```ts
 /**
  * @esql_function scalar
- * @availability stack since=8.11.0
- * @availability serverless
+ * @availability stack since=8.11.0 stability=stable
+ * @availability serverless stability=stable
  */
 ```
 
-- `@availability stack since=<version>` -- available in self-managed Elasticsearch since the given version.
-- `@availability serverless` -- available in Elasticsearch Serverless.
+- `@availability stack since=<version> stability=<stable|beta|experimental>` -- available in self-managed Elasticsearch since the given version with the given stability level.
+- `@availability serverless stability=<stable|beta|experimental>` -- available in Elasticsearch Serverless.
 - `@esql_preview` -- the feature is in technical preview and may change or be removed.
+
+The `stability` value is mapped from the server's `FunctionAppliesToLifecycle` enum:
+`GA` -> `stable`, `BETA` -> `beta`, `PREVIEW`/`DEVELOPMENT` -> `experimental`.
+Lifecycles like `COMING`, `DEPRECATED`, `DISCONTINUED`, and `UNAVAILABLE` are skipped.
+
+## Enums
+
+The metamodel uses proper enums for categorical fields instead of string literals:
+
+| Enum | Values | Used by |
+|------|--------|---------|
+| `EsqlCommandPosition` | `source`, `processing` | `EsqlCommand.position` |
+| `EsqlFunctionKind` | `scalar`, `aggregate`, `grouping`, `time_series_aggregate` | `EsqlFunctionDefinition.kind`, `acceptedFunctionKinds` |
+| `EsqlOperatorFixity` | `prefix`, `infix`, `postfix` | `EsqlOperator.fixity` |
+| `Stability` | `stable`, `beta`, `experimental` | `Availability.stability` |
+
+These serialize to their string values in `schema.json` (e.g. `"position": "source"`).
 
 ## Schema output
 
@@ -263,6 +369,14 @@ existing `endpoints` and `types`:
       ...
     ],
     "commands": [
+      {
+        "name": "STATS", "position": "processing",
+        "acceptedFunctionKinds": ["scalar", "aggregate", "time_series_aggregate"],
+        "clauses": [
+          { "keyword": "BY", "acceptedFunctionKinds": ["scalar", "grouping"], ... }
+        ],
+        ...
+      },
       { "name": "FROM", "position": "source", "description": "...", "clauses": [...] },
       ...
     ],
@@ -303,7 +417,7 @@ The flow:
 2. Files under `esql/_lang/` are skipped by the existing class/interface/enum/type-alias visitors.
 3. `compileEsqlLanguageModel()` iterates those files, dispatching on annotation:
    - `@esql_data_type` on type aliases produces `EsqlDataType`
-   - `@esql_command` on classes produces `EsqlCommand`
+   - `@esql_command` on classes produces `EsqlCommand` (with `acceptedFunctionKinds` from `@esql_function_context`)
    - `@esql_operator` on classes produces `EsqlOperator`
    - `@esql_function` on function declarations produces `EsqlFunctionDefinition`
 4. The result is stored as `model.esql`.
@@ -311,9 +425,13 @@ The flow:
 
 ## Extraction tool
 
-The script at `compiler/src/extract-esql-lang.ts` can parse the Elasticsearch Java source
-to extract function metadata. It reads `@FunctionInfo`, `@Param`, and `@MapParam`
-annotations and the function registry, and produces a JSON report.
+The extraction tool at `compiler/src/esql/extract.ts` parses the Elasticsearch server
+source to keep the specification in sync. It reads two things:
+
+1. **Java function annotations** (`@FunctionInfo`, `@Param`, `@MapParam`, `@FunctionAppliesTo`)
+   -- generates TypeScript function files and syncs data types
+2. **ANTLR grammar** (`EsqlBaseParser.g4` and imported parser grammars) -- auto-syncs
+   `commands.ts` with the current grammar
 
 The easiest way to run it is via the Makefile target:
 
@@ -327,10 +445,27 @@ Or directly via npm:
 npm run extract-esql-lang --prefix compiler -- --es-path /path/to/elasticsearch
 ```
 
-The TypeScript files under `specification/esql/_lang/` are the **source of truth** for the
-schema output. The extraction tool is a maintenance aid to help identify new or changed
-functions in the server -- it does not overwrite the spec files directly. After running the
-tool, review the report and update the TypeScript files by hand.
+### What the tool does
+
+**Functions**: Parses `@FunctionInfo` annotations using `tree-sitter-java`, extracts
+parameter types, return types, descriptions, aliases, availability, and map parameters.
+Generates TypeScript function files grouped by subdirectory (e.g. `scalar_math.ts`).
+
+**Data types**: Collects all types referenced in function signatures and adds any
+missing ones to `data_types.ts`.
+
+**Commands**: Parses the ANTLR grammar to determine source vs processing commands,
+which commands accept aggregate functions (`aggFields`), and which have `BY` clauses.
+Then:
+- **Auto-adds** commands present in the grammar but missing from `commands.ts` (skeleton with TODO description and placeholder availability)
+- **Auto-removes** commands present in `commands.ts` but no longer in the grammar
+- **Patches** `@esql_function_context` annotations on commands that accept aggregate/grouping functions
+
+### When to run it
+
+Run the extraction tool whenever the Elasticsearch server adds, removes, or changes
+ES|QL functions or commands. Review the output and fill in any TODO descriptions or
+placeholder availability versions on newly added commands.
 
 ## TypeScript quirks
 
