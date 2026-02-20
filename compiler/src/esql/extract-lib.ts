@@ -618,3 +618,480 @@ export function generateTsFile (funcs: FunctionDef[]): string {
   lines.push('')
   return lines.join('\n')
 }
+
+// ---------------------------------------------------------------------------
+// ANTLR grammar parser
+// ---------------------------------------------------------------------------
+
+export interface GrammarCommandDef {
+  name: string
+  position: 'source' | 'processing'
+  devGated: boolean
+  mainArg?: { label?: string, grammarType: string }
+  clauses: Array<{
+    keyword: string
+    label?: string
+    grammarType: string
+    optional: boolean
+  }>
+  usesAggFields: boolean
+  hasByClause: boolean
+}
+
+export interface GrammarInfo {
+  sourceCommands: string[]
+  processingCommands: string[]
+  aggregateContextCommands: string[]
+  groupingContextCommands: string[]
+  commands: GrammarCommandDef[]
+}
+
+const GRAMMAR_TYPE_MAP: Record<string, string> = {
+  fields: 'EsqlFieldList',
+  aggFields: 'EsqlAggFields',
+  qualifiedNamePatterns: 'EsqlFieldPatternList',
+  indexPattern: 'EsqlIndexPattern',
+  indexPatternAndMetadataFields: 'EsqlIndexPattern',
+  orderExpression: 'EsqlSortExpressionList',
+  string: 'EsqlStringPattern',
+  mapExpression: 'EsqlMapExpression',
+  renameClause: 'EsqlRenameClauseList',
+  forkSubQueries: 'EsqlSubQueryList'
+}
+
+function mapGrammarType (grammarType: string): string {
+  return GRAMMAR_TYPE_MAP[grammarType] ?? 'EsqlExpression'
+}
+
+/**
+ * Strip block and line comments from an ANTLR grammar file.
+ * Also strips @header{...} and options{...} blocks.
+ */
+function stripGrammarBoilerplate (text: string): string {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/\/\/[^\n]*/g, '')
+    .replace(/@header\s*\{[\s\S]*?\}/g, '')
+    .replace(/options\s*\{[\s\S]*?\}/g, '')
+}
+
+/**
+ * Parse an ANTLR grammar file (and its imports) into a rule map: ruleName -> body text.
+ */
+function parseGrammarRules (grammarDir: string, mainFile: string): Map<string, string> {
+  const rules = new Map<string, string>()
+
+  function parseFile (filePath: string): void {
+    if (!fs.existsSync(filePath)) return
+    const content = stripGrammarBoilerplate(fs.readFileSync(filePath, 'utf-8'))
+
+    const importMatch = content.match(/import\s+([\s\S]*?);/)
+    if (importMatch != null) {
+      const imports = importMatch[1].split(',').map(s => s.trim()).filter(Boolean)
+      for (const imp of imports) {
+        parseFile(path.join(grammarDir, 'parser', imp + '.g4'))
+      }
+    }
+
+    const ruleRegex = /^([a-zA-Z_]\w*)\s*\n?\s*:([\s\S]*?);/gm
+    let m: RegExpExecArray | null
+    while ((m = ruleRegex.exec(content)) != null) {
+      rules.set(m[1], m[2].trim())
+    }
+  }
+
+  parseFile(path.join(grammarDir, mainFile))
+  return rules
+}
+
+/**
+ * Given the body of a sourceCommand or processingCommand rule, extract each alternative's
+ * rule name and whether it is dev-gated.
+ */
+export function parseAlternatives (body: string): Array<{ ruleName: string, devGated: boolean }> {
+  const results: Array<{ ruleName: string, devGated: boolean }> = []
+  for (const line of splitTopLevelAlternatives(body)) {
+    const trimmed = line.replace(/#\w+/g, '').trim()
+    if (trimmed === '') continue
+    const devGated = trimmed.includes('isDevVersion()')
+    const ruleMatch = trimmed.match(/(?:\{[^}]*\}\??\s*)?(\w+Command)\b/i)
+    if (ruleMatch != null) {
+      results.push({ ruleName: ruleMatch[1], devGated })
+    }
+  }
+  return results
+}
+
+/**
+ * Resolve the uppercase keyword from a command rule body.
+ * E.g. "FROM indexPatternAndMetadataFields" → "FROM"
+ * E.g. "INLINE INLINE_STATS stats=aggFields ..." → "INLINE_STATS"
+ * Dev-prefixed tokens (DEV_LOOKUP, DEV_INSIST, DEV_MMR, DEV_EXPLAIN) are cleaned.
+ */
+/**
+ * Split a rule body by top-level | (not inside parentheses).
+ */
+export function splitTopLevelAlternatives (body: string): string[] {
+  const alts: string[] = []
+  let depth = 0
+  let start = 0
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] === '(') depth++
+    else if (body[i] === ')') depth--
+    else if (body[i] === '|' && depth === 0) {
+      alts.push(body.slice(start, i))
+      start = i + 1
+    }
+  }
+  alts.push(body.slice(start))
+  return alts
+}
+
+export function resolveCommandKeyword (ruleBody: string): string {
+  let firstAlt = splitTopLevelAlternatives(ruleBody)[0].trim()
+
+  // Strip #label alternatives
+  firstAlt = firstAlt.replace(/#\w+/g, '')
+
+  // Repeatedly strip innermost parenthesized groups (handles nesting)
+  let prev = ''
+  while (prev !== firstAlt) {
+    prev = firstAlt
+    firstAlt = firstAlt.replace(/\([^()]*\)/g, '')
+  }
+
+  // Strip label= assignments and optional markers
+  firstAlt = firstAlt.replace(/\w+=/g, ' ')
+  firstAlt = firstAlt.replace(/[?*]/g, ' ')
+
+  const tokens = firstAlt.trim().split(/\s+/)
+  const keywords: string[] = []
+  for (const tok of tokens) {
+    if (/^[A-Z][A-Z_0-9]*$/.test(tok)) {
+      keywords.push(tok)
+    } else {
+      break
+    }
+  }
+
+  if (keywords.length === 0) return ''
+
+  // For multi-keyword sequences (e.g., INLINE INLINE_STATS, SHOW INFO),
+  // prefer the first token with an underscore (the compound name),
+  // otherwise use the first token.
+  let name = keywords[0]
+  for (const kw of keywords) {
+    if (kw.includes('_') && !kw.startsWith('DEV_')) {
+      name = kw
+      break
+    }
+  }
+
+  if (name.startsWith('DEV_')) name = name.slice(4)
+  return name
+}
+
+/**
+ * Parse a command rule body to extract main argument and clauses.
+ */
+function parseCommandStructure (ruleBody: string): {
+  mainArg?: { label?: string, grammarType: string }
+  clauses: GrammarCommandDef['clauses']
+  usesAggFields: boolean
+  hasByClause: boolean
+} {
+  const firstAlt = splitTopLevelAlternatives(ruleBody)[0].trim()
+  const usesAggFields = /\baggFields\b/.test(firstAlt)
+  const hasByClause = /\bBY\b/.test(firstAlt)
+
+  const clauses: GrammarCommandDef['clauses'] = []
+  let mainArg: { label?: string, grammarType: string } | undefined
+
+  const clauseRegex = /\(?\s*(BY|ON|WITH|AS|METADATA|SCORE\s+BY|KEY\s+BY|GROUP\s+BY)\s+(?:(\w+)=)?(\w+)/g
+  let cm: RegExpExecArray | null
+  const clauseKeywords = new Set<string>()
+  while ((cm = clauseRegex.exec(firstAlt)) != null) {
+    const keyword = cm[1].replace(/\s+/g, '_')
+    if (clauseKeywords.has(keyword)) continue
+    clauseKeywords.add(keyword)
+    const label = cm[2]
+    const grammarType = cm[3]
+    const regionBefore = firstAlt.slice(0, cm.index)
+    const optional = regionBefore.endsWith('(') || firstAlt[cm.index + cm[0].length]?.includes('?') || /\(\s*$/.test(regionBefore)
+    clauses.push({ keyword, label, grammarType, optional })
+  }
+
+  const tokensAfterKeyword = firstAlt.replace(/^\s*\w+\s+/, '')
+  if (tokensAfterKeyword.length > 0) {
+    const argMatch = tokensAfterKeyword.match(/^(?:(\w+)=)?(\w+)/)
+    if (argMatch != null) {
+      const argGrammarType = argMatch[2]
+      if (!['BY', 'ON', 'WITH', 'AS', 'METADATA'].includes(argGrammarType.toUpperCase())) {
+        mainArg = { label: argMatch[1], grammarType: argGrammarType }
+      }
+    }
+  }
+
+  return { mainArg, clauses, usesAggFields, hasByClause }
+}
+
+/**
+ * Parse the ANTLR grammar from an Elasticsearch checkout and extract command structure.
+ */
+export function parseGrammar (esPath: string): GrammarInfo {
+  const grammarDir = path.join(esPath, 'x-pack/plugin/esql/src/main/antlr')
+  const rules = parseGrammarRules(grammarDir, 'EsqlBaseParser.g4')
+
+  const sourceBody = rules.get('sourceCommand') ?? ''
+  const processingBody = rules.get('processingCommand') ?? ''
+
+  const sourceAlts = parseAlternatives(sourceBody)
+  const processingAlts = parseAlternatives(processingBody)
+
+  const commands: GrammarCommandDef[] = []
+
+  for (const { ruleName, devGated } of sourceAlts) {
+    const body = rules.get(ruleName) ?? ''
+    const keyword = resolveCommandKeyword(body)
+    if (keyword === '') continue
+    const struct = parseCommandStructure(body)
+    commands.push({
+      name: keyword,
+      position: 'source',
+      devGated,
+      ...struct
+    })
+  }
+
+  for (const { ruleName, devGated } of processingAlts) {
+    const body = rules.get(ruleName) ?? ''
+    const keyword = resolveCommandKeyword(body)
+    if (keyword === '') continue
+    const struct = parseCommandStructure(body)
+    commands.push({
+      name: keyword,
+      position: 'processing',
+      devGated,
+      ...struct
+    })
+  }
+
+  const sourceCommands = commands.filter(c => c.position === 'source').map(c => c.name)
+  const processingCommands = commands.filter(c => c.position === 'processing').map(c => c.name)
+  const aggregateContextCommands = commands.filter(c => c.usesAggFields).map(c => c.name)
+  const groupingContextCommands = commands.filter(c => c.hasByClause && c.usesAggFields).map(c => c.name)
+
+  return {
+    sourceCommands,
+    processingCommands,
+    aggregateContextCommands,
+    groupingContextCommands,
+    commands
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sync commands.ts
+// ---------------------------------------------------------------------------
+
+/**
+ * Given grammar info and the current commands.ts content, produce updated content
+ * with new commands added, stale commands removed, and @esql_function_context
+ * annotations patched.
+ *
+ * Returns { content, added, removed } for logging.
+ */
+export function syncCommandsTs (
+  grammar: GrammarInfo,
+  currentContent: string
+): { content: string, added: string[], removed: string[] } {
+  const grammarNames = new Set(grammar.commands.map(c => c.name))
+
+  const existingNames = new Set<string>()
+  const classRegex = /export class (\w+)\s*\{/g
+  let cm: RegExpExecArray | null
+  while ((cm = classRegex.exec(currentContent)) != null) {
+    existingNames.add(cm[1])
+  }
+
+  const added: string[] = []
+  const removed: string[] = []
+
+  let content = currentContent
+
+  // --- Remove stale commands ---
+  for (const name of existingNames) {
+    if (!grammarNames.has(name)) {
+      content = removeClassBlock(content, name)
+      removed.push(name)
+    }
+  }
+
+  // --- Add new commands ---
+  for (const cmd of grammar.commands) {
+    if (existingNames.has(cmd.name)) continue
+
+    const skeleton = generateCommandSkeleton(cmd)
+    const section = cmd.position === 'source'
+      ? '// Source commands'
+      : '// Processing commands'
+
+    const sectionIdx = content.lastIndexOf(section)
+    if (sectionIdx >= 0) {
+      const insertIdx = content.indexOf('\n', sectionIdx) + 1
+      content = content.slice(0, insertIdx) + '\n' + skeleton + '\n' + content.slice(insertIdx)
+    } else {
+      content = content.trimEnd() + '\n\n' + skeleton + '\n'
+    }
+    added.push(cmd.name)
+  }
+
+  // --- Patch @esql_function_context annotations ---
+  content = patchFunctionContextAnnotations(content, grammar)
+
+  // --- Update imports ---
+  content = updateCommandImports(content)
+
+  return { content, added, removed }
+}
+
+/**
+ * Remove a class block and its preceding JSDoc from the content.
+ */
+function removeClassBlock (content: string, className: string): string {
+  const lines = content.split('\n')
+  const result: string[] = []
+  let i = 0
+  while (i < lines.length) {
+    if (lines[i].match(new RegExp(`^export class ${className}\\s*\\{`))) {
+      // Walk back to remove preceding JSDoc
+      while (result.length > 0 && result[result.length - 1].trim() === '') result.pop()
+      if (result.length > 0 && result[result.length - 1].trim() === '*/') {
+        while (result.length > 0 && !result[result.length - 1].trim().startsWith('/**')) {
+          result.pop()
+        }
+        if (result.length > 0) result.pop() // remove the /** line
+      }
+      // Skip forward past the class closing brace
+      let braceDepth = 0
+      while (i < lines.length) {
+        if (lines[i].includes('{')) braceDepth++
+        if (lines[i].includes('}')) braceDepth--
+        i++
+        if (braceDepth === 0) break
+      }
+      // Skip trailing blank lines
+      while (i < lines.length && lines[i].trim() === '') i++
+      continue
+    }
+    result.push(lines[i])
+    i++
+  }
+  return result.join('\n')
+}
+
+function generateCommandSkeleton (cmd: GrammarCommandDef): string {
+  const lines: string[] = []
+  lines.push('/**')
+  lines.push(` * @esql_command ${cmd.position}`)
+  if (cmd.devGated) lines.push(' * @esql_preview')
+  lines.push(' */')
+  lines.push(`export class ${cmd.name} {`)
+
+  if (cmd.mainArg != null) {
+    const tsType = mapGrammarType(cmd.mainArg.grammarType)
+    const label = cmd.mainArg.label ?? cmd.mainArg.grammarType
+    lines.push(`  ${label}: ${tsType}`)
+  }
+
+  for (const clause of cmd.clauses) {
+    const tsType = mapGrammarType(clause.grammarType)
+    const propName = (clause.label ?? clause.keyword).toLowerCase()
+    lines.push(`  /** @esql_clause ${clause.keyword} */`)
+    lines.push(`  ${propName}${clause.optional ? '?' : ''}: ${tsType}`)
+  }
+
+  lines.push('}')
+  return lines.join('\n')
+}
+
+function patchFunctionContextAnnotations (content: string, grammar: GrammarInfo): string {
+  const aggSet = new Set(grammar.aggregateContextCommands)
+  const groupSet = new Set(grammar.groupingContextCommands)
+
+  const lines = content.split('\n')
+  const result: string[] = []
+  let currentClass = ''
+
+  // First pass: strip existing @esql_function_context annotations
+  for (const line of lines) {
+    if (/^\s*\*\s*@esql_function_context\s+/.test(line)) continue
+    result.push(line)
+  }
+
+  // Second pass: insert annotations in the right places
+  const output: string[] = []
+  for (let i = 0; i < result.length; i++) {
+    const line = result[i]
+    output.push(line)
+
+    // Track which class we're about to enter (look ahead for export class)
+    const classMatch = line.match(/^export class (\w+)\s*\{/)
+    if (classMatch != null) {
+      currentClass = classMatch[1]
+    }
+
+    // After @esql_command line, insert aggregate/time_series_aggregate if applicable
+    const cmdMatch = line.match(/^\s*\*\s*@esql_command\s+(source|processing)\s*$/)
+    if (cmdMatch != null) {
+      // Look ahead to find which class this JSDoc belongs to
+      for (let j = i + 1; j < result.length; j++) {
+        const ahead = result[j].match(/^export class (\w+)\s*\{/)
+        if (ahead != null) {
+          if (aggSet.has(ahead[1])) {
+            output.push(' * @esql_function_context aggregate')
+            output.push(' * @esql_function_context time_series_aggregate')
+          }
+          break
+        }
+      }
+    }
+
+    // After @esql_clause BY, insert grouping if the containing class is in groupSet
+    if (/^\s*\*\s*@esql_clause BY\s*$/.test(line)) {
+      // Find the containing class by looking back
+      for (let j = i; j >= 0; j--) {
+        const cm = result[j].match(/^export class (\w+)\s*\{/)
+        if (cm != null) {
+          if (groupSet.has(cm[1])) {
+            output.push('   * @esql_function_context grouping')
+          }
+          break
+        }
+      }
+    }
+  }
+
+  return output.join('\n')
+}
+
+function updateCommandImports (content: string): string {
+  const usedTypes = new Set<string>()
+  const typePattern = /:\s*(Esql\w+)/g
+  let tm: RegExpExecArray | null
+  while ((tm = typePattern.exec(content)) != null) {
+    usedTypes.add(tm[1])
+  }
+
+  if (usedTypes.size === 0) return content
+
+  const sorted = Array.from(usedTypes).sort()
+  const importBlock = `import {\n  ${sorted.join(',\n  ')}\n} from '@esql/_lang/_types'`
+
+  const existingImport = content.match(/import\s*\{[\s\S]*?\}\s*from\s*'@esql\/_lang\/_types'/)
+  if (existingImport != null) {
+    content = content.replace(existingImport[0], importBlock)
+  }
+
+  return content
+}

@@ -15,6 +15,7 @@ import {
   findFiles, readFile, tsParser,
   extractFunctionDefs, parseRegistry,
   subdirToTsFile, collectUsedTypes, syncDataTypes, generateTsFile,
+  parseGrammar, syncCommandsTs,
   FunctionDef
 } from './extract-lib'
 
@@ -126,6 +127,30 @@ function main (): void {
     const filePath = path.join(functionsDir, `${tsFile}.ts`)
     fs.writeFileSync(filePath, content)
     console.log(`  ${tsFile}.ts: ${funcs.length} functions`)
+  }
+
+  // --- Grammar parsing and command sync ---
+  console.log(`\nParsing ANTLR grammar...`)
+  const grammarInfo = parseGrammar(esPath)
+  console.log(`  Source commands: ${grammarInfo.sourceCommands.join(', ')}`)
+  console.log(`  Processing commands: ${grammarInfo.processingCommands.join(', ')}`)
+  console.log(`  Aggregate context: ${grammarInfo.aggregateContextCommands.join(', ')}`)
+  console.log(`  Grouping context: ${grammarInfo.groupingContextCommands.join(', ')}`)
+
+  const commandsPath = path.join(outDir, 'commands.ts')
+  if (fs.existsSync(commandsPath)) {
+    const currentCommands = fs.readFileSync(commandsPath, 'utf-8')
+    const { content: updatedCommands, added, removed } = syncCommandsTs(grammarInfo, currentCommands)
+    if (added.length > 0) {
+      console.log(`\nAdded ${added.length} new commands: ${added.join(', ')}`)
+    }
+    if (removed.length > 0) {
+      console.log(`\nRemoved ${removed.length} stale commands: ${removed.join(', ')}`)
+    }
+    fs.writeFileSync(commandsPath, updatedCommands)
+    console.log(`\nSynced commands.ts with grammar.`)
+  } else {
+    console.log(`\nWarning: ${commandsPath} not found, skipping command sync.`)
   }
 
   console.log(`\nDone. Generated ${sortedFiles.length} files with ${allFunctions.length} functions.`)

@@ -29,8 +29,13 @@ import {
   extractFunctionDefs,
   collectUsedTypes,
   generateTsFile,
+  resolveCommandKeyword,
+  parseAlternatives,
+  splitTopLevelAlternatives,
+  syncCommandsTs,
   tsParser,
-  FunctionDef
+  FunctionDef,
+  GrammarInfo
 } from '../../src/esql/extract-lib'
 
 const fixturesDir = join(__dirname, 'fixtures')
@@ -431,4 +436,219 @@ test('generateTsFile: builtin types not imported', t => {
   t.false(output.includes("from '@esql/_lang/data_types'"))
   t.true(output.includes('x: boolean'))
   t.true(output.includes('): string'))
+})
+
+// ---------------------------------------------------------------------------
+// splitTopLevelAlternatives
+// ---------------------------------------------------------------------------
+
+test('splitTopLevelAlternatives: simple alternatives', t => {
+  const result = splitTopLevelAlternatives('fromCommand | rowCommand | showCommand')
+  t.is(result.length, 3)
+  t.is(result[0].trim(), 'fromCommand')
+  t.is(result[1].trim(), 'rowCommand')
+  t.is(result[2].trim(), 'showCommand')
+})
+
+test('splitTopLevelAlternatives: pipe inside parentheses not split', t => {
+  const result = splitTopLevelAlternatives('type=(A | B | C) JOIN target')
+  t.is(result.length, 1)
+  t.is(result[0].trim(), 'type=(A | B | C) JOIN target')
+})
+
+// ---------------------------------------------------------------------------
+// resolveCommandKeyword
+// ---------------------------------------------------------------------------
+
+test('resolveCommandKeyword: simple command', t => {
+  t.is(resolveCommandKeyword('FROM indexPatternAndMetadataFields'), 'FROM')
+})
+
+test('resolveCommandKeyword: multi-word keeps underscore token', t => {
+  t.is(resolveCommandKeyword('INLINE INLINE_STATS stats=aggFields? (BY grouping=fields)?'), 'INLINE_STATS')
+})
+
+test('resolveCommandKeyword: SHOW INFO picks SHOW', t => {
+  t.is(resolveCommandKeyword('SHOW INFO  #showInfo'), 'SHOW')
+})
+
+test('resolveCommandKeyword: DEV_ prefix stripped', t => {
+  t.is(resolveCommandKeyword('DEV_LOOKUP tableName=indexPattern ON matchFields=qualifiedNamePatterns'), 'LOOKUP')
+})
+
+test('resolveCommandKeyword: type assignment with parens', t => {
+  t.is(resolveCommandKeyword('type=(JOIN_LOOKUP | DEV_JOIN_LEFT | DEV_JOIN_RIGHT) JOIN joinTarget joinCondition'), 'JOIN')
+})
+
+test('resolveCommandKeyword: underscore command', t => {
+  t.is(resolveCommandKeyword('MV_EXPAND qualifiedName'), 'MV_EXPAND')
+  t.is(resolveCommandKeyword('CHANGE_POINT value=qualifiedName (ON key=qualifiedName)?'), 'CHANGE_POINT')
+})
+
+// ---------------------------------------------------------------------------
+// parseAlternatives
+// ---------------------------------------------------------------------------
+
+test('parseAlternatives: extracts rule names', t => {
+  const body = 'fromCommand | rowCommand | showCommand'
+  const result = parseAlternatives(body)
+  t.is(result.length, 3)
+  t.is(result[0].ruleName, 'fromCommand')
+  t.is(result[0].devGated, false)
+})
+
+test('parseAlternatives: detects dev-gated', t => {
+  const body = 'evalCommand | {this.isDevVersion()}? lookupCommand'
+  const result = parseAlternatives(body)
+  t.is(result.length, 2)
+  t.is(result[0].devGated, false)
+  t.is(result[1].ruleName, 'lookupCommand')
+  t.is(result[1].devGated, true)
+})
+
+// ---------------------------------------------------------------------------
+// syncCommandsTs
+// ---------------------------------------------------------------------------
+
+test('syncCommandsTs: adds missing commands', t => {
+  const grammar: GrammarInfo = {
+    sourceCommands: ['FROM', 'NEW_CMD'],
+    processingCommands: [],
+    aggregateContextCommands: [],
+    groupingContextCommands: [],
+    commands: [
+      { name: 'FROM', position: 'source', devGated: false, clauses: [], usesAggFields: false, hasByClause: false },
+      { name: 'NEW_CMD', position: 'source', devGated: true, clauses: [],
+        mainArg: { grammarType: 'fields' },
+        usesAggFields: false, hasByClause: false }
+    ]
+  }
+
+  const existing = [
+    '// Source commands',
+    '/**',
+    ' * @esql_command source',
+    ' */',
+    'export class FROM {',
+    '  index: EsqlIndexPattern',
+    '}'
+  ].join('\n')
+
+  const { content, added, removed } = syncCommandsTs(grammar, existing)
+  t.deepEqual(added, ['NEW_CMD'])
+  t.deepEqual(removed, [])
+  t.true(content.includes('export class NEW_CMD {'))
+  t.true(content.includes('@esql_preview'))
+  t.true(content.includes('EsqlFieldList'))
+})
+
+test('syncCommandsTs: removes stale commands', t => {
+  const grammar: GrammarInfo = {
+    sourceCommands: ['FROM'],
+    processingCommands: [],
+    aggregateContextCommands: [],
+    groupingContextCommands: [],
+    commands: [
+      { name: 'FROM', position: 'source', devGated: false, clauses: [], usesAggFields: false, hasByClause: false }
+    ]
+  }
+
+  const existing = [
+    '// Source commands',
+    '/**',
+    ' * @esql_command source',
+    ' */',
+    'export class FROM {',
+    '  index: EsqlIndexPattern',
+    '}',
+    '',
+    '/**',
+    ' * @esql_command source',
+    ' */',
+    'export class OLD_CMD {',
+    '  x: EsqlExpression',
+    '}'
+  ].join('\n')
+
+  const { content, removed } = syncCommandsTs(grammar, existing)
+  t.deepEqual(removed, ['OLD_CMD'])
+  t.false(content.includes('export class OLD_CMD'))
+  t.true(content.includes('export class FROM'))
+})
+
+test('syncCommandsTs: patches aggregate annotations', t => {
+  const grammar: GrammarInfo = {
+    sourceCommands: [],
+    processingCommands: ['STATS'],
+    aggregateContextCommands: ['STATS'],
+    groupingContextCommands: ['STATS'],
+    commands: [
+      { name: 'STATS', position: 'processing', devGated: false,
+        clauses: [{ keyword: 'BY', grammarType: 'fields', optional: true }],
+        mainArg: { grammarType: 'aggFields' },
+        usesAggFields: true, hasByClause: true }
+    ]
+  }
+
+  const existing = [
+    '/**',
+    ' * @esql_command processing',
+    ' */',
+    'export class STATS {',
+    '  aggregates: EsqlAggFields',
+    '  /**',
+    '   * @esql_clause BY',
+    '   */',
+    '  by?: EsqlFieldList',
+    '}'
+  ].join('\n')
+
+  const { content } = syncCommandsTs(grammar, existing)
+  t.true(content.includes('@esql_function_context aggregate'))
+  t.true(content.includes('@esql_function_context time_series_aggregate'))
+  t.true(content.includes('@esql_function_context grouping'))
+})
+
+test('syncCommandsTs: idempotent', t => {
+  const grammar: GrammarInfo = {
+    sourceCommands: ['FROM'],
+    processingCommands: ['STATS'],
+    aggregateContextCommands: ['STATS'],
+    groupingContextCommands: ['STATS'],
+    commands: [
+      { name: 'FROM', position: 'source', devGated: false, clauses: [], usesAggFields: false, hasByClause: false },
+      { name: 'STATS', position: 'processing', devGated: false,
+        clauses: [{ keyword: 'BY', grammarType: 'fields', optional: true }],
+        mainArg: { grammarType: 'aggFields' },
+        usesAggFields: true, hasByClause: true }
+    ]
+  }
+
+  const existing = [
+    '// Source commands',
+    '/**',
+    ' * @esql_command source',
+    ' */',
+    'export class FROM {',
+    '}',
+    '// Processing commands',
+    '/**',
+    ' * @esql_command processing',
+    ' * @esql_function_context aggregate',
+    ' * @esql_function_context time_series_aggregate',
+    ' */',
+    'export class STATS {',
+    '  /**',
+    '   * @esql_clause BY',
+    '   * @esql_function_context grouping',
+    '   */',
+    '  by?: EsqlFieldList',
+    '}'
+  ].join('\n')
+
+  const { content, added, removed } = syncCommandsTs(grammar, existing)
+  t.deepEqual(added, [])
+  t.deepEqual(removed, [])
+  const { content: content2 } = syncCommandsTs(grammar, content)
+  t.is(content, content2)
 })
