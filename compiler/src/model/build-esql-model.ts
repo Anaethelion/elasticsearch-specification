@@ -205,16 +205,16 @@ function compileClause (member: PropertyDeclaration, tags: Record<string, string
  * Build the acceptedFunctionKinds array from @esql_function_context tags.
  * Always includes 'scalar'. Returns undefined if only scalar (the default).
  */
-function buildAcceptedFunctionKinds (contextTags: string[] | undefined): model.EsqlFunctionKind[] | undefined {
-  if (contextTags == null || contextTags.length === 0) return undefined
+function buildAcceptedFunctionKinds (contextTags: string[] | undefined): model.EsqlFunctionKind[] {
   const kinds = new Set<model.EsqlFunctionKind>([model.EsqlFunctionKind.scalar])
-  for (const tag of contextTags) {
-    const trimmed = tag.trim()
-    if (Object.values(model.EsqlFunctionKind).includes(trimmed as model.EsqlFunctionKind)) {
-      kinds.add(trimmed as model.EsqlFunctionKind)
+  if (contextTags != null) {
+    for (const tag of contextTags) {
+      const trimmed = tag.trim()
+      if (Object.values(model.EsqlFunctionKind).includes(trimmed as model.EsqlFunctionKind)) {
+        kinds.add(trimmed as model.EsqlFunctionKind)
+      }
     }
   }
-  if (kinds.size === 1) return undefined
   return Array.from(kinds)
 }
 

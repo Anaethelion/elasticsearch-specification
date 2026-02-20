@@ -46,7 +46,7 @@ To build a query, a client walks this chain:
 1. **Pick a source command** -- filter `commands` where `position = source`
 2. **Chain processing commands** -- filter `commands` where `position = processing`
 3. **For each command's expressions** -- check `command.acceptedFunctionKinds` to know
-   which functions to offer (defaults to `[scalar]` when absent)
+   which functions to offer
 4. **For each clause** -- check `clause.acceptedFunctionKinds` independently
    (e.g. the BY clause in STATS accepts `grouping` functions like BUCKET)
 5. **For function parameters and return types** -- look up `EsqlDataType` to validate
@@ -190,8 +190,8 @@ This produces `acceptedFunctionKinds` in `schema.json`:
 
 Clients use `acceptedFunctionKinds` for autocomplete: when a user is typing inside
 a STATS command, offer scalar, aggregate, and time-series aggregate functions; in the
-BY clause, offer scalar and grouping functions. Commands without `acceptedFunctionKinds`
-accept only scalar functions by default.
+BY clause, offer scalar and grouping functions. Every command and clause always has
+`acceptedFunctionKinds` explicitly set (at minimum `["scalar"]`).
 
 ### Command annotation reference
 

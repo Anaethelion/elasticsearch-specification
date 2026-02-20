@@ -1066,8 +1066,7 @@ pub struct EsqlCommandClause {
     pub typ: ValueOf,
 
     /// Function kinds valid in this clause's expression context (e.g. grouping in BY).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub accepted_function_kinds: Option<Vec<EsqlFunctionKind>>,
+    pub accepted_function_kinds: Vec<EsqlFunctionKind>,
 }
 
 /// An ES|QL command (e.g. FROM, KEEP, STATS, WHERE).
@@ -1089,8 +1088,7 @@ pub struct EsqlCommand {
     pub clauses: Vec<EsqlCommandClause>,
 
     /// Function kinds valid in this command's expression context.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub accepted_function_kinds: Option<Vec<EsqlFunctionKind>>,
+    pub accepted_function_kinds: Vec<EsqlFunctionKind>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub availability: Option<Availabilities>,

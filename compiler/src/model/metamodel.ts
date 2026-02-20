@@ -522,8 +522,8 @@ export class EsqlCommandClause {
   description?: string
   required: boolean
   type: ValueOf
-  /** Function kinds valid in this clause's expression context (e.g. grouping in BY). Defaults to [scalar]. */
-  acceptedFunctionKinds?: EsqlFunctionKind[]
+  /** Function kinds valid in this clause's expression context (e.g. grouping in BY). Always includes scalar. */
+  acceptedFunctionKinds: EsqlFunctionKind[]
 }
 
 /**
@@ -537,8 +537,8 @@ export class EsqlCommand {
   /** The main/positional argument of the command */
   mainArgument?: ValueOf
   clauses: EsqlCommandClause[]
-  /** Function kinds valid in this command's expression context. Defaults to [scalar]. */
-  acceptedFunctionKinds?: EsqlFunctionKind[]
+  /** Function kinds valid in this command's expression context. Always includes scalar. */
+  acceptedFunctionKinds: EsqlFunctionKind[]
   availability?: Availabilities
   preview?: boolean
 }
