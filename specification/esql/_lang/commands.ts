@@ -18,20 +18,35 @@
  */
 
 import {
-  EsqlIndexPattern,
+  EsqlAggFields,
+  EsqlExpression,
   EsqlFieldList,
   EsqlFieldPatternList,
-  EsqlAggFields,
-  EsqlSortExpressionList,
-  EsqlExpression,
-  EsqlStringPattern,
+  EsqlIndexPattern,
   EsqlMapExpression,
   EsqlRenameClauseList,
+  EsqlSortExpressionList,
+  EsqlStringPattern,
   EsqlSubQueryList
 } from '@esql/_lang/_types'
 
 // =============================================================================
 // Source commands
+
+/**
+ * @esql_command source
+ * @esql_preview
+ */
+export class EXPLAIN {
+  subqueryExpression: EsqlExpression
+}
+
+/**
+ * @esql_command source
+ */
+export class PROMQL {
+  promqlParam: EsqlExpression
+}
 // =============================================================================
 
 /**
@@ -89,6 +104,15 @@ export class TS {
 
 // =============================================================================
 // Processing commands
+
+/**
+ * @esql_command processing
+ * @esql_preview
+ */
+export class MMR {
+  /** @esql_clause ON */
+  diversifyfield: EsqlExpression
+}
 // =============================================================================
 
 /**
@@ -149,6 +173,8 @@ export class LIMIT {
 /**
  * Groups rows by one or more expressions and computes aggregate values.
  * @esql_command processing
+ * @esql_function_context aggregate
+ * @esql_function_context time_series_aggregate
  * @availability stack since=8.11.0
  * @availability serverless
  */
@@ -158,6 +184,7 @@ export class STATS {
   /**
    * Grouping expressions.
    * @esql_clause BY
+   * @esql_function_context grouping
    */
   by?: EsqlFieldList
 }
@@ -341,6 +368,8 @@ export class RERANK {
 /**
  * Like STATS but preserves original rows and appends aggregate columns via a join.
  * @esql_command processing
+ * @esql_function_context aggregate
+ * @esql_function_context time_series_aggregate
  * @availability stack since=8.18.0
  */
 export class INLINE_STATS {
@@ -349,6 +378,7 @@ export class INLINE_STATS {
   /**
    * Grouping expressions.
    * @esql_clause BY
+   * @esql_function_context grouping
    */
   by?: EsqlFieldList
 }
