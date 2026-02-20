@@ -20,9 +20,9 @@
 import * as model from '../model/metamodel'
 import { ValidationErrors } from '../validation-errors'
 
-const validFunctionKinds = ['scalar', 'aggregate', 'grouping', 'time_series_aggregate']
-const validFixities = ['prefix', 'infix', 'postfix']
-const validPositions = ['source', 'processing']
+const validFunctionKinds = Object.values(model.EsqlFunctionKind)
+const validFixities = Object.values(model.EsqlOperatorFixity)
+const validPositions = Object.values(model.EsqlCommandPosition)
 
 export default async function validateEsqlModel (apiModel: model.Model, errors: ValidationErrors): Promise<model.Model> {
   const esql = apiModel.esql

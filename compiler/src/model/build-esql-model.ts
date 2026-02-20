@@ -154,13 +154,16 @@ function compileDataType (decl: TypeAliasDeclaration, tags: Record<string, strin
 function compileCommand (decl: ClassDeclaration, tags: Record<string, string>): model.EsqlCommand {
   const dupTags = parseJsDocTagsAllowDuplicates(decl.getJsDocs())
   const name = decl.getName() ?? ''
-  const position = tags.esql_command as 'source' | 'processing'
+  const position = tags.esql_command as model.EsqlCommandPosition
+
+  const commandKinds = buildAcceptedFunctionKinds(dupTags.esql_function_context)
 
   const command: model.EsqlCommand = {
     name,
     position,
     description: getDescription(decl.getJsDocs()),
     clauses: [],
+    acceptedFunctionKinds: commandKinds,
     availability: parseAvailability(dupTags),
     preview: tags.esql_preview !== undefined ? true : undefined
   }
@@ -170,7 +173,8 @@ function compileCommand (decl: ClassDeclaration, tags: Record<string, string>): 
     if (!Node.isPropertyDeclaration(member)) continue
     const memberTags = parseJsDocTags(member.getJsDocs())
     if (memberTags.esql_clause !== undefined) {
-      command.clauses.push(compileClause(member, memberTags))
+      const memberDupTags = parseJsDocTagsAllowDuplicates(member.getJsDocs())
+      command.clauses.push(compileClause(member, memberTags, memberDupTags))
     } else if (!mainArgSet) {
       command.mainArgument = {
         kind: 'instance_of',
@@ -183,7 +187,8 @@ function compileCommand (decl: ClassDeclaration, tags: Record<string, string>): 
   return command
 }
 
-function compileClause (member: PropertyDeclaration, tags: Record<string, string>): model.EsqlCommandClause {
+function compileClause (member: PropertyDeclaration, tags: Record<string, string>, dupTags: Record<string, string[]>): model.EsqlCommandClause {
+  const clauseKinds = buildAcceptedFunctionKinds(dupTags.esql_function_context)
   return {
     keyword: tags.esql_clause,
     description: getDescription(member.getJsDocs()),
@@ -191,8 +196,26 @@ function compileClause (member: PropertyDeclaration, tags: Record<string, string
     type: {
       kind: 'instance_of',
       type: { name: getPropertyTypeName(member), namespace: 'esql._lang' }
+    },
+    acceptedFunctionKinds: clauseKinds
+  }
+}
+
+/**
+ * Build the acceptedFunctionKinds array from @esql_function_context tags.
+ * Always includes 'scalar'. Returns undefined if only scalar (the default).
+ */
+function buildAcceptedFunctionKinds (contextTags: string[] | undefined): model.EsqlFunctionKind[] | undefined {
+  if (contextTags == null || contextTags.length === 0) return undefined
+  const kinds = new Set<model.EsqlFunctionKind>([model.EsqlFunctionKind.scalar])
+  for (const tag of contextTags) {
+    const trimmed = tag.trim()
+    if (Object.values(model.EsqlFunctionKind).includes(trimmed as model.EsqlFunctionKind)) {
+      kinds.add(trimmed as model.EsqlFunctionKind)
     }
   }
+  if (kinds.size === 1) return undefined
+  return Array.from(kinds)
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +246,7 @@ function compileOperator (decl: ClassDeclaration, tags: Record<string, string>):
   return {
     name,
     symbol: tags.esql_symbol ?? name,
-    fixity: tags.esql_operator as 'prefix' | 'infix' | 'postfix',
+    fixity: tags.esql_operator as model.EsqlOperatorFixity,
     precedenceGroup: parseInt(tags.esql_precedence ?? '0', 10),
     description: getDescription(decl.getJsDocs()),
     params,
@@ -258,7 +281,7 @@ function compileFunction (decl: FunctionDeclaration, tags: Record<string, string
 
   const funcDef: model.EsqlFunctionDefinition = {
     name,
-    kind: tags.esql_function as model.EsqlFunctionDefinition['kind'],
+    kind: tags.esql_function as model.EsqlFunctionKind,
     description: getDescription(decl.getJsDocs()),
     params,
     returnType,

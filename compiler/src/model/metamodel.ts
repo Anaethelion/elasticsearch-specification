@@ -483,6 +483,24 @@ export class UrlTemplate {
 // ------------------------------------------------------------------------------------------------
 // ES|QL Language Model
 
+export enum EsqlCommandPosition {
+  source = 'source',
+  processing = 'processing'
+}
+
+export enum EsqlFunctionKind {
+  scalar = 'scalar',
+  aggregate = 'aggregate',
+  grouping = 'grouping',
+  time_series_aggregate = 'time_series_aggregate'
+}
+
+export enum EsqlOperatorFixity {
+  prefix = 'prefix',
+  infix = 'infix',
+  postfix = 'postfix'
+}
+
 /**
  * An ES|QL data type that can appear in function signatures, operator definitions, etc.
  */
@@ -504,6 +522,8 @@ export class EsqlCommandClause {
   description?: string
   required: boolean
   type: ValueOf
+  /** Function kinds valid in this clause's expression context (e.g. grouping in BY). Defaults to [scalar]. */
+  acceptedFunctionKinds?: EsqlFunctionKind[]
 }
 
 /**
@@ -512,11 +532,13 @@ export class EsqlCommandClause {
 export class EsqlCommand {
   /** Uppercase command name as used in the language (e.g. "FROM", "KEEP", "STATS") */
   name: string
-  position: 'source' | 'processing'
+  position: EsqlCommandPosition
   description?: string
   /** The main/positional argument of the command */
   mainArgument?: ValueOf
   clauses: EsqlCommandClause[]
+  /** Function kinds valid in this command's expression context. Defaults to [scalar]. */
+  acceptedFunctionKinds?: EsqlFunctionKind[]
   availability?: Availabilities
   preview?: boolean
 }
@@ -539,7 +561,7 @@ export class EsqlOperator {
   name: string
   /** The operator symbol as written in ES|QL (e.g. "+", "==", "NOT", "IS NULL") */
   symbol: string
-  fixity: 'prefix' | 'infix' | 'postfix'
+  fixity: EsqlOperatorFixity
   /** Lower number = binds tighter */
   precedenceGroup: number
   description?: string
@@ -606,7 +628,7 @@ export class EsqlFunctionDefinition {
   name: string
   /** Uppercase aliases (e.g. ["BIN"] for BUCKET) */
   aliases?: string[]
-  kind: 'scalar' | 'aggregate' | 'grouping' | 'time_series_aggregate'
+  kind: EsqlFunctionKind
   description?: string
   detailedDescription?: string
   note?: string
